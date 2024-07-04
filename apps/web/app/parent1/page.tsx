@@ -1,10 +1,9 @@
 'use client';
-import { IwpcWindow, IwpcWindowAgent } from '@repo/iwpc/index';
+import { IwpcWindowAgent, useIwpcWindow } from '@repo/iwpc/index';
 import { useRef } from 'react';
 
-const iwpcWindow = new IwpcWindow(window);
-
 export default function Page(): JSX.Element {
+  const iwpcWindow = useIwpcWindow();
   const iwpcChildWindowRef = useRef<IwpcWindowAgent>();
 
   return (
@@ -13,7 +12,7 @@ export default function Page(): JSX.Element {
       <button
         type='button'
         onClick={async () => {
-          iwpcChildWindowRef.current = await iwpcWindow.open('./child1');
+          iwpcChildWindowRef.current = await iwpcWindow?.open('./child1');
         }}
       >
         open child 1

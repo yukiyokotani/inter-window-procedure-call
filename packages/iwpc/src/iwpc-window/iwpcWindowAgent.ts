@@ -9,7 +9,7 @@ export class IwpcWindowAgent {
   // window
   private _window: Window;
   private _windowId: string;
-  private _parentWindowId: string;
+  private _ownerWindowId: string;
   private _iwpcResolveMap: Map<
     string,
     (value: unknown | PromiseLike<unknown>) => void
@@ -22,7 +22,7 @@ export class IwpcWindowAgent {
   constructor(window: Window, windowId: string, parentWindowId: string) {
     this._window = window;
     this._windowId = windowId;
-    this._parentWindowId = parentWindowId;
+    this._ownerWindowId = parentWindowId;
     this._iwpcResolveMap = new Map();
     this._iwpcRejectmap = new Map();
     this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
@@ -55,7 +55,7 @@ export class IwpcWindowAgent {
       iwpcInternalId: iwpcInternalId,
       processId: processId,
       targetWindowId: this._windowId,
-      senderWindowId: this._parentWindowId,
+      senderWindowId: this._ownerWindowId,
       args: args
     };
 
@@ -70,7 +70,7 @@ export class IwpcWindowAgent {
   }
 
   private _iwpcMessageSubscriber(message: IwpcMessage) {
-    if (message.targetWindowId !== this._windowId) {
+    if (message.targetWindowId !== this._ownerWindowId) {
       return;
     }
     if (message.type !== 'RETURN') {

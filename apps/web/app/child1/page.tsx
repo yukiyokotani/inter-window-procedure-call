@@ -1,10 +1,9 @@
 'use client';
-import { IwpcWindow } from '@repo/iwpc/index';
+import { useIwpcWindow } from '@repo/iwpc/index';
 import { useCallback, useEffect, useState } from 'react';
 
-const iwpcWindow = new IwpcWindow(window);
-
 export default function Page(): JSX.Element {
+  const iwpcWindow = useIwpcWindow();
   const [count, setCount] = useState(0);
 
   const incrementCounter = useCallback(() => {
@@ -12,7 +11,7 @@ export default function Page(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    iwpcWindow.register('INCREMENT_COUNTER', incrementCounter);
+    iwpcWindow?.register('INCREMENT_COUNTER', incrementCounter);
   }, []);
 
   return (

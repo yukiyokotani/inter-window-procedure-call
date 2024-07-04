@@ -99,11 +99,12 @@ export class IwpcWindow {
     const target = options?.target ?? '_blank';
     const features = this._createChildWindowFeatures(options);
 
+    let childWindow: Window | null | undefined;
     let rejectChildWindowInitialization: (reason?: unknown) => void;
 
     const iwpcChildWindow = new Promise<IwpcWindowAgent>((resolve, reject) => {
       rejectChildWindowInitialization = reject;
-      const childWindow = window.open(path, target, features);
+      childWindow = window.open(path, target, features);
       if (childWindow === null) {
         throw new Error('Could not obtain a reference to the child window.');
       }
@@ -113,7 +114,7 @@ export class IwpcWindow {
 
     this.window.setTimeout(() => {
       rejectChildWindowInitialization?.(
-        'Request for window id from child window is timed out.'
+        'Notification of id from child window timed out. The child window is closed because communication is not available.'
       );
     }, INITIALIZATION_TIMEOUT);
 
@@ -131,7 +132,7 @@ export class IwpcWindow {
   private async _initialize() {
     if (this._parentWindow === null) {
       console.warn(
-        'Initialization as a ItpcWindow was skipped since there is no parent window for this window.'
+        'Initialization as an IwpcWindow was skipped because the parent window does not exist.'
       );
     }
 
@@ -228,7 +229,7 @@ export class IwpcWindow {
       iwpcInternalId: message.iwpcInternalId,
       processId: message.processId,
       targetWindowId: message.senderWindowId,
-      senderWindowId: this.windowId,
+      senderWindowId: this._windowId,
       returnValue: returnValue
     };
     this._iwpcTopic.publish(iwpcReturnMessage);
