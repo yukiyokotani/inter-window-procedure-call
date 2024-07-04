@@ -1,0 +1,2 @@
+export const INITIALIZATION_TIMEOUT = 3000;
+export const IWPC_PROCESS_TIMEOUT = 3000;
