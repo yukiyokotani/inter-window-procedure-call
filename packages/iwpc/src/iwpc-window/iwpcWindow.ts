@@ -26,6 +26,7 @@ export class IwpcWindow {
   private _windowId: string;
   private _parentWindow: Window | null;
   private _parentWindowId: string | undefined;
+  private _parentIwpcWindow: IwpcWindowAgent | undefined;
   private _childWindowIdMap: Map<string, Window> | undefined;
   private _childWindowResolveMap:
     | Map<
@@ -75,6 +76,10 @@ export class IwpcWindow {
 
   get windowId() {
     return this._windowId;
+  }
+
+  get parentIwpcWindow() {
+    return this._parentIwpcWindow;
   }
 
   get parentWindowId() {
@@ -130,12 +135,6 @@ export class IwpcWindow {
   }
 
   private async _initialize() {
-    if (this._parentWindow === null) {
-      console.warn(
-        'Initialization as an IwpcWindow was skipped because the parent window does not exist.'
-      );
-    }
-
     // Add EventListener
     this.window.addEventListener(
       'message',
@@ -145,6 +144,13 @@ export class IwpcWindow {
       'message',
       this._receivedWindowIdMessageHandler.bind(this)
     );
+
+    if (this._parentWindow === null) {
+      console.warn(
+        'Initialization as an IwpcWindow was skipped because the parent window does not exist.'
+      );
+      return;
+    }
 
     setTimeout(() => {
       this._rejectReady?.();
@@ -202,16 +208,22 @@ export class IwpcWindow {
   private _receivedWindowIdMessageHandler(
     message: MessageEvent<RecievedWindowId>
   ) {
-    if (message.data.type === 'RECEIVED_WINDOW_ID') {
-      if (!message.source) {
-        return;
-      }
-      if (message.source === this.window) {
-        return;
-      }
-      this._parentWindowId = message.data.myWindowId;
-      this._resolveReady?.(true);
+    if (message.data.type !== 'RECEIVED_WINDOW_ID') {
+      return;
     }
+    if (!message.source || !messageEventSourceIsWindow(message.source)) {
+      return;
+    }
+    if (message.source === this._window) {
+      return;
+    }
+    this._parentWindowId = message.data.myWindowId;
+    this._parentIwpcWindow = new IwpcWindowAgent(
+      message.source,
+      this._parentWindowId,
+      this._windowId
+    );
+    this._resolveReady?.(true);
   }
 
   private _iwpcMessageSubscriber(message: IwpcMessage) {

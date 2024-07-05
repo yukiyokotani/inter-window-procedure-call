@@ -19,10 +19,10 @@ export class IwpcWindowAgent {
   // Subscription
   private _iwpcTopic: Topic<'IWPC', IwpcMessage>;
 
-  constructor(window: Window, windowId: string, parentWindowId: string) {
+  constructor(window: Window, windowId: string, ownerWindowId: string) {
     this._window = window;
     this._windowId = windowId;
-    this._ownerWindowId = parentWindowId;
+    this._ownerWindowId = ownerWindowId;
     this._iwpcResolveMap = new Map();
     this._iwpcRejectmap = new Map();
     this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
