@@ -94,13 +94,7 @@ export class IwpcWindowAgent extends Logger {
       args: args
     };
     this._iwpcTopic.publish(iwpcInvokeMessage);
-    this._log(
-      '↪ Requested a procedural call.',
-      `processId: ${processId}`,
-      `taskId: ${iwpcTaskId}`,
-      `requester: ${this._ownerWindowId}`,
-      `processor: ${this._windowId}`
-    );
+    this._log('↪ Requested a procedural call.', iwpcInvokeMessage);
 
     return returnValue;
   }
@@ -113,13 +107,7 @@ export class IwpcWindowAgent extends Logger {
       return;
     }
     this._iwpcResolveMap.get(message.iwpcTaskId)?.(message.returnValue);
-    this._log(
-      '↩ The result of the procedure call was received and returned to the invoker.',
-      `processId: ${message.processId}`,
-      `taskId: ${message.iwpcTaskId}`,
-      `requester: ${this._ownerWindowId}`,
-      `processor: ${message.senderWindowId}`
-    );
+    this._log('↩ Returned the results of the procedure call.', message);
     this._cleanupIwpcMap(message.iwpcTaskId);
   }
 

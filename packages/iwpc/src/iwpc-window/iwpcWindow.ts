@@ -115,7 +115,7 @@ export class IwpcWindow extends Logger {
 
     if (this._parentWindow === null) {
       this._warn(
-        '⚙️ Initialization as an IwpcWindow was skipped because the parent window does not exist.'
+        '⚠ Initialization as an IwpcWindow was skipped because the parent window does not exist.'
       );
       this._resolveReady?.(true);
       return;
@@ -296,16 +296,11 @@ export class IwpcWindow extends Logger {
     if (message.type !== 'INVOKE') {
       return;
     }
-    this._log(
-      '↪ A procedure call was requested.',
-      `processId: ${message.processId}`,
-      `taskId: ${message.iwpcTaskId}`,
-      `requester: ${message.senderWindowId}`
-    );
+    this._log('↪ Received a message of procedural call request.', message);
     const procedure = this._iwpcRegisteredProcessMap?.get(message.processId);
     if (procedure === undefined) {
       this._warn(
-        '↪ The requested procedure call is not registered.',
+        '⚠ The requested procedure call is not registered.',
         `processId: ${message.processId}`,
         `taskId: ${message.iwpcTaskId}`,
         `requester: ${message.senderWindowId}`
@@ -322,10 +317,8 @@ export class IwpcWindow extends Logger {
     };
     this._iwpcTopic.publish(iwpcReturnMessage);
     this._log(
-      '↩ The results of the procedure call were returned.',
-      `processId: ${message.processId}`,
-      `taskId: ${message.iwpcTaskId}`,
-      `requester: ${message.senderWindowId}`
+      '↩ Sent a message of the result of the procedure call.',
+      iwpcReturnMessage
     );
   }
 }
