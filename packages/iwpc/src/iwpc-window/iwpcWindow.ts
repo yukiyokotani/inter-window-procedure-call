@@ -3,14 +3,14 @@ import { nanoid } from 'nanoid';
 import { Topic } from '../topic/topic';
 
 import { INITIALIZATION_TIMEOUT } from './constants';
+import { IwpcWindowAgent } from './IwpcWindowAgent';
+import { Logger } from './Logger';
 import {
   IwpcMessage,
   IwpcReturnMessage,
   NotifyWindowIdMessage,
   RecievedWindowIdMessage
 } from './message';
-import { IwpcWindowAgent } from './IwpcWindowAgent';
-import { Logger } from './Logger';
 import { messageEventSourceIsWindow } from './utils';
 
 export type IwpcOptions = {

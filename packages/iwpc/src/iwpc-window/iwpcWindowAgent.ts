@@ -3,8 +3,8 @@ import { nanoid } from 'nanoid';
 import { Topic } from '../topic/topic';
 
 import { IWPC_PROCESS_TIMEOUT } from './constants';
-import { IwpcInvokeMessage, IwpcMessage } from './message';
 import { Logger } from './Logger';
+import { IwpcInvokeMessage, IwpcMessage } from './message';
 
 export type IwpcAgentOptions = {
   debug?: boolean;
