@@ -1,27 +1,27 @@
-export type NotifyWindowId = {
+export type NotifyWindowIdMessage = {
   type: 'NOTIFIY_WINDOW_ID';
   myWindowId: string;
 };
 
-export type RecievedWindowId = {
+export type RecievedWindowIdMessage = {
   type: 'RECEIVED_WINDOW_ID';
   yourWindowId: string;
   myWindowId: string;
 };
 
-type IwpcMessageBase = {
+type IwpcMessageBaseMessage = {
   iwpcTaskId: string;
   processId: string;
   targetWindowId: string;
   senderWindowId: string;
 };
 
-export type IwpcInvokeMessage = IwpcMessageBase & {
+export type IwpcInvokeMessage = IwpcMessageBaseMessage & {
   type: 'INVOKE';
   args: unknown;
 };
 
-export type IwpcReturnMessage = IwpcMessageBase & {
+export type IwpcReturnMessage = IwpcMessageBaseMessage & {
   type: 'RETURN';
   returnValue: unknown;
 };

@@ -1,3 +1,3 @@
-export * from './iwpc-window/iwpcWindow';
-export * from './iwpc-window/iwpcWindowAgent';
+export * from './iwpc-window/IwpcWindow';
+export * from './iwpc-window/IwpcWindowAgent';
 export * from './react-hooks/useIwpcWindow';

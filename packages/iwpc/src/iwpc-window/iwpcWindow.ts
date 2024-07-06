@@ -6,12 +6,12 @@ import { INITIALIZATION_TIMEOUT } from './constants';
 import {
   IwpcMessage,
   IwpcReturnMessage,
-  NotifyWindowId,
-  RecievedWindowId
-} from './iwpcMessage';
-import { IwpcWindowAgent } from './iwpcWindowAgent';
-import { Logger } from './logger';
-import { messageEventSourceIsWindow } from './util';
+  NotifyWindowIdMessage,
+  RecievedWindowIdMessage
+} from './message';
+import { IwpcWindowAgent } from './IwpcWindowAgent';
+import { Logger } from './Logger';
+import { messageEventSourceIsWindow } from './utils';
 
 export type IwpcOptions = {
   debug?: boolean;
@@ -130,7 +130,7 @@ export class IwpcWindow extends Logger {
       this._rejectReady?.();
     }, INITIALIZATION_TIMEOUT);
 
-    const notifyIdMessage: NotifyWindowId = {
+    const notifyIdMessage: NotifyWindowIdMessage = {
       type: 'NOTIFIY_WINDOW_ID',
       myWindowId: this._windowId
     };
@@ -197,7 +197,7 @@ export class IwpcWindow extends Logger {
       'message',
       this._receivedWindowIdMessageHandler.bind(this)
     );
-    this._log('🗑 dispose excecuted', `windowId: ${this._windowId}`);
+    this._log(`🗑 Disposed iwpcWindow: ${this._windowId}`);
   }
 
   public close() {
@@ -220,7 +220,9 @@ export class IwpcWindow extends Logger {
     return features;
   }
 
-  private _notifyWindowIdMessageHandler(message: MessageEvent<NotifyWindowId>) {
+  private _notifyWindowIdMessageHandler(
+    message: MessageEvent<NotifyWindowIdMessage>
+  ) {
     if (message.data.type !== 'NOTIFIY_WINDOW_ID') {
       return;
     }
@@ -241,7 +243,7 @@ export class IwpcWindow extends Logger {
     const childWindow = message.source;
     this._childWindowIdMap?.set(childWindowId, childWindow);
 
-    const receivedIdMessage: RecievedWindowId = {
+    const receivedIdMessage: RecievedWindowIdMessage = {
       type: 'RECEIVED_WINDOW_ID',
       yourWindowId: childWindowId,
       myWindowId: this._windowId
@@ -258,7 +260,7 @@ export class IwpcWindow extends Logger {
   }
 
   private _receivedWindowIdMessageHandler(
-    message: MessageEvent<RecievedWindowId>
+    message: MessageEvent<RecievedWindowIdMessage>
   ) {
     if (message.data.type !== 'RECEIVED_WINDOW_ID') {
       return;
@@ -276,7 +278,7 @@ export class IwpcWindow extends Logger {
       return;
     }
     this._log(
-      '🆔📬 It is confirmed that the parent window has successfully received the ID of this window.'
+      '🆔📬 Confirmed that the parent window has successfully received the ID of this window.'
     );
     this._parentWindowId = message.data.myWindowId;
     this._parentIwpcWindow = new IwpcWindowAgent(
