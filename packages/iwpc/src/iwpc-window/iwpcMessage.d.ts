@@ -10,7 +10,7 @@ export type RecievedWindowId = {
 };
 
 type IwpcMessageBase = {
-  iwpcInternalId: string;
+  iwpcTaskId: string;
   processId: string;
   targetWindowId: string;
   senderWindowId: string;

@@ -31,6 +31,7 @@ export class Topic<Name extends string = 'string', Message = unknown> {
   }
 
   public close() {
+    this._bc.onmessage = null;
     this._bc.close();
     this._subscribers = [];
   }

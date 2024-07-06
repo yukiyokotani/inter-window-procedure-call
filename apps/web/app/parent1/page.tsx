@@ -24,7 +24,12 @@ export default function Page(): JSX.Element {
         <button
           type='button'
           onClick={async () => {
-            iwpcChildWindowRef.current = await iwpcWindow?.open('./child1');
+            iwpcChildWindowRef.current = await iwpcWindow?.open('./child1', {
+              width: 600,
+              height: 200,
+              top: 0,
+              left: 800
+            });
           }}
         >
           open child 1

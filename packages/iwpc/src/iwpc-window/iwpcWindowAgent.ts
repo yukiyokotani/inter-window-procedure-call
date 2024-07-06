@@ -26,7 +26,7 @@ export class IwpcWindowAgent {
     this._iwpcResolveMap = new Map();
     this._iwpcRejectmap = new Map();
     this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
-    this._iwpcTopic.subscribe(this._iwpcMessageSubscriber.bind(this));
+    this._iwpcTopic.subscribe(this._returnMessageSubscriber.bind(this));
   }
 
   get window() {
@@ -41,18 +41,18 @@ export class IwpcWindowAgent {
     processId: string,
     args: Argument
   ): Promise<Return> {
-    const iwpcInternalId = nanoid();
+    const iwpcTaskId = nanoid();
     const returnValue = new Promise<Return>((resolve, reject) => {
       this._iwpcResolveMap.set(
-        iwpcInternalId,
+        iwpcTaskId,
         resolve as unknown as (value: unknown | PromiseLike<unknown>) => void
       );
-      this._iwpcRejectmap.set(iwpcInternalId, reject);
+      this._iwpcRejectmap.set(iwpcTaskId, reject);
     });
 
     const iwpcInvokeMessage: IwpcInvokeMessage = {
       type: 'INVOKE',
-      iwpcInternalId: iwpcInternalId,
+      iwpcTaskId: iwpcTaskId,
       processId: processId,
       targetWindowId: this._windowId,
       senderWindowId: this._ownerWindowId,
@@ -62,26 +62,26 @@ export class IwpcWindowAgent {
     this._iwpcTopic.publish(iwpcInvokeMessage);
 
     setTimeout(() => {
-      this._iwpcRejectmap.get(iwpcInternalId)?.();
-      this._cleanupIwpcMap(iwpcInternalId);
+      this._iwpcRejectmap.get(iwpcTaskId)?.();
+      this._cleanupIwpcMap(iwpcTaskId);
     }, IWPC_PROCESS_TIMEOUT);
 
     return returnValue;
   }
 
-  private _iwpcMessageSubscriber(message: IwpcMessage) {
+  private _returnMessageSubscriber(message: IwpcMessage) {
     if (message.targetWindowId !== this._ownerWindowId) {
       return;
     }
     if (message.type !== 'RETURN') {
       return;
     }
-    this._iwpcResolveMap.get(message.iwpcInternalId)?.(message.returnValue);
-    this._cleanupIwpcMap(message.iwpcInternalId);
+    this._iwpcResolveMap.get(message.iwpcTaskId)?.(message.returnValue);
+    this._cleanupIwpcMap(message.iwpcTaskId);
   }
 
-  private _cleanupIwpcMap(iwpcInternalId: string) {
-    this._iwpcResolveMap.delete(iwpcInternalId);
-    this._iwpcRejectmap.delete(iwpcInternalId);
+  private _cleanupIwpcMap(iwpcTaskId: string) {
+    this._iwpcResolveMap.delete(iwpcTaskId);
+    this._iwpcRejectmap.delete(iwpcTaskId);
   }
 }

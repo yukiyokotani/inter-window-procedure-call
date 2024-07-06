@@ -66,7 +66,6 @@ export class IwpcWindow {
       this._rejectReady = reject;
     });
     this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
-    this._iwpcTopic.subscribe(this._iwpcMessageSubscriber.bind(this));
     this._initialize();
   }
 
@@ -101,6 +100,7 @@ export class IwpcWindow {
     path: string,
     options?: ChildWindowOption
   ): Promise<IwpcWindowAgent> {
+    await this._ready;
     const target = options?.target ?? '_blank';
     const features = this._createChildWindowFeatures(options);
 
@@ -126,15 +126,31 @@ export class IwpcWindow {
     return iwpcChildWindow;
   }
 
-  public close() {
+  public dispose() {
     this._iwpcTopic?.close();
     this._childWindowIdMap = undefined;
     this._childWindowResolveMap = undefined;
     this._childWindowRejectMap = undefined;
     this._iwpcRegisteredProcessMap = undefined;
+
+    this.window.removeEventListener(
+      'message',
+      this._notifyWindowIdMessageHandler
+    );
+    this.window.removeEventListener(
+      'message',
+      this._receivedWindowIdMessageHandler
+    );
   }
 
-  private async _initialize() {
+  public close() {
+    this.dispose();
+    this._window.close();
+  }
+
+  public async _initialize() {
+    console.log(this._windowId);
+    this._iwpcTopic.subscribe(this._invokeMessageSubscriber.bind(this));
     // Add EventListener
     this.window.addEventListener(
       'message',
@@ -149,6 +165,7 @@ export class IwpcWindow {
       console.warn(
         'Initialization as an IwpcWindow was skipped because the parent window does not exist.'
       );
+      this._resolveReady?.(true);
       return;
     }
 
@@ -160,7 +177,11 @@ export class IwpcWindow {
       type: 'NOTIFIY_WINDOW_ID',
       myWindowId: this._windowId
     };
-    this._parentWindow?.postMessage(notifyIdMessage, '*');
+    this._parentWindow?.postMessage(
+      notifyIdMessage,
+      this._window.location.origin
+    );
+    console.log('🌟 Notification', this._windowId);
   }
 
   private _createChildWindowFeatures(options?: ChildWindowOption) {
@@ -179,30 +200,31 @@ export class IwpcWindow {
   }
 
   private _notifyWindowIdMessageHandler(message: MessageEvent<NotifyWindowId>) {
-    if (message.data.type === 'NOTIFIY_WINDOW_ID') {
-      if (!message.source || !messageEventSourceIsWindow(message.source)) {
-        return;
-      }
-      if (message.source === this.window) {
-        return;
-      }
-      const childWindowId = message.data.myWindowId;
-      const childWindow = message.source;
-      this._childWindowIdMap?.set(childWindowId, childWindow);
-
-      const receivedIdMessage: RecievedWindowId = {
-        type: 'RECEIVED_WINDOW_ID',
-        yourWindowId: childWindowId,
-        myWindowId: this._windowId
-      };
-      message.source.postMessage(receivedIdMessage, '*');
-      const iwpcWindow = new IwpcWindowAgent(
-        childWindow,
-        childWindowId,
-        this._windowId
-      );
-      this._childWindowResolveMap?.get(childWindow)?.(iwpcWindow);
+    if (message.data.type !== 'NOTIFIY_WINDOW_ID') {
+      return;
     }
+    if (!message.source || !messageEventSourceIsWindow(message.source)) {
+      return;
+    }
+    if (message.source === this.window) {
+      return;
+    }
+    const childWindowId = message.data.myWindowId;
+    const childWindow = message.source;
+    this._childWindowIdMap?.set(childWindowId, childWindow);
+
+    const receivedIdMessage: RecievedWindowId = {
+      type: 'RECEIVED_WINDOW_ID',
+      yourWindowId: childWindowId,
+      myWindowId: this._windowId
+    };
+    message.source.postMessage(receivedIdMessage, this._window.location.origin);
+    const iwpcWindow = new IwpcWindowAgent(
+      childWindow,
+      childWindowId,
+      this._windowId
+    );
+    this._childWindowResolveMap?.get(childWindow)?.(iwpcWindow);
   }
 
   private _receivedWindowIdMessageHandler(
@@ -223,22 +245,25 @@ export class IwpcWindow {
       this._parentWindowId,
       this._windowId
     );
+    console.log('🔥', message.data, this._parentIwpcWindow);
     this._resolveReady?.(true);
   }
 
-  private _iwpcMessageSubscriber(message: IwpcMessage) {
+  private _invokeMessageSubscriber(message: IwpcMessage) {
     if (message.targetWindowId !== this._windowId) {
       return;
     }
     if (message.type !== 'INVOKE') {
       return;
     }
+    console.log('invoke', message);
+    console.log(this._iwpcRegisteredProcessMap);
     const returnValue = this._iwpcRegisteredProcessMap?.get(
       message.processId
     )?.(message.args);
     const iwpcReturnMessage: IwpcReturnMessage = {
       type: 'RETURN',
-      iwpcInternalId: message.iwpcInternalId,
+      iwpcTaskId: message.iwpcTaskId,
       processId: message.processId,
       targetWindowId: message.senderWindowId,
       senderWindowId: this._windowId,
