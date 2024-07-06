@@ -66,7 +66,7 @@ export class IwpcWindow {
       this._rejectReady = reject;
     });
     this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
-    this._initialize();
+    this.initialize();
   }
 
   get window() {
@@ -89,11 +89,51 @@ export class IwpcWindow {
     return this._ready;
   }
 
+  public async initialize() {
+    console.log(this._windowId);
+    this._iwpcTopic.subscribe(this._invokeMessageSubscriber.bind(this));
+    // Add EventListener
+    this.window.addEventListener(
+      'message',
+      this._notifyWindowIdMessageHandler.bind(this)
+    );
+    this.window.addEventListener(
+      'message',
+      this._receivedWindowIdMessageHandler.bind(this)
+    );
+
+    if (this._parentWindow === null) {
+      console.warn(
+        'Initialization as an IwpcWindow was skipped because the parent window does not exist.'
+      );
+      this._resolveReady?.(true);
+      return;
+    }
+
+    setTimeout(() => {
+      this._rejectReady?.();
+    }, INITIALIZATION_TIMEOUT);
+
+    const notifyIdMessage: NotifyWindowId = {
+      type: 'NOTIFIY_WINDOW_ID',
+      myWindowId: this._windowId
+    };
+    this._parentWindow?.postMessage(
+      notifyIdMessage,
+      this._window.location.origin
+    );
+    console.log('🌟 Notification', this._windowId);
+  }
+
   public async register(
     processId: string,
     callback: (args: unknown) => unknown
   ) {
     this._iwpcRegisteredProcessMap?.set(processId, callback);
+  }
+
+  public async unregister(processId: string) {
+    this._iwpcRegisteredProcessMap?.delete(processId);
   }
 
   public async open(
@@ -135,53 +175,17 @@ export class IwpcWindow {
 
     this.window.removeEventListener(
       'message',
-      this._notifyWindowIdMessageHandler
+      this._notifyWindowIdMessageHandler.bind(this)
     );
     this.window.removeEventListener(
       'message',
-      this._receivedWindowIdMessageHandler
+      this._receivedWindowIdMessageHandler.bind(this)
     );
   }
 
   public close() {
     this.dispose();
     this._window.close();
-  }
-
-  public async _initialize() {
-    console.log(this._windowId);
-    this._iwpcTopic.subscribe(this._invokeMessageSubscriber.bind(this));
-    // Add EventListener
-    this.window.addEventListener(
-      'message',
-      this._notifyWindowIdMessageHandler.bind(this)
-    );
-    this.window.addEventListener(
-      'message',
-      this._receivedWindowIdMessageHandler.bind(this)
-    );
-
-    if (this._parentWindow === null) {
-      console.warn(
-        'Initialization as an IwpcWindow was skipped because the parent window does not exist.'
-      );
-      this._resolveReady?.(true);
-      return;
-    }
-
-    setTimeout(() => {
-      this._rejectReady?.();
-    }, INITIALIZATION_TIMEOUT);
-
-    const notifyIdMessage: NotifyWindowId = {
-      type: 'NOTIFIY_WINDOW_ID',
-      myWindowId: this._windowId
-    };
-    this._parentWindow?.postMessage(
-      notifyIdMessage,
-      this._window.location.origin
-    );
-    console.log('🌟 Notification', this._windowId);
   }
 
   private _createChildWindowFeatures(options?: ChildWindowOption) {
