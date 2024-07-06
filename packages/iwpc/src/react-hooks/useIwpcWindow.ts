@@ -1,24 +1,20 @@
 'use client';
 import { useLayoutEffect, useState } from 'react';
 
-import { IwpcWindow } from '../iwpc-window/iwpcWindow';
+import { IwpcOptions, IwpcWindow } from '../iwpc-window/iwpcWindow';
 
-type Option = {
-  debug?: boolean;
-};
-
-// const iwpcWindow = new IwpcWindow(window);
-
-export const useIwpcWindow = (option?: Option) => {
+export const useIwpcWindow = (options?: IwpcOptions) => {
   const [iwpcWindow] = useState(() => {
     if (typeof window !== 'undefined') {
-      return new IwpcWindow(window);
+      return new IwpcWindow(window, options);
     }
   });
 
   useLayoutEffect(() => {
     iwpcWindow?.initialize();
-    return () => iwpcWindow?.dispose();
+    return () => {
+      iwpcWindow?.dispose();
+    };
   }, [iwpcWindow]);
 
   return iwpcWindow;

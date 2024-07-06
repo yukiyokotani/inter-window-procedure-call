@@ -4,12 +4,23 @@ import { Topic } from '../topic/topic';
 
 import { IWPC_PROCESS_TIMEOUT } from './constants';
 import { IwpcInvokeMessage, IwpcMessage } from './iwpcMessage';
+import { Logger } from './logger';
 
-export class IwpcWindowAgent {
+export type IwpcAgentOptions = {
+  debug?: boolean;
+};
+
+type InvokeOptions = {
+  timeout: number;
+};
+export class IwpcWindowAgent extends Logger {
+  private _options?: IwpcAgentOptions;
+
   // window
   private _window: Window;
   private _windowId: string;
   private _ownerWindowId: string;
+  private _iwpcPromiseMap: Map<string, Promise<unknown>>;
   private _iwpcResolveMap: Map<
     string,
     (value: unknown | PromiseLike<unknown>) => void
@@ -19,10 +30,18 @@ export class IwpcWindowAgent {
   // Subscription
   private _iwpcTopic: Topic<'IWPC', IwpcMessage>;
 
-  constructor(window: Window, windowId: string, ownerWindowId: string) {
+  constructor(
+    window: Window,
+    windowId: string,
+    ownerWindowId: string,
+    options?: IwpcAgentOptions
+  ) {
+    super(options?.debug === true);
+    this._options = options;
     this._window = window;
     this._windowId = windowId;
     this._ownerWindowId = ownerWindowId;
+    this._iwpcPromiseMap = new Map();
     this._iwpcResolveMap = new Map();
     this._iwpcRejectmap = new Map();
     this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
@@ -39,7 +58,8 @@ export class IwpcWindowAgent {
 
   public async invoke<Argument = unknown, Return = unknown>(
     processId: string,
-    args: Argument
+    args: Argument,
+    options?: InvokeOptions
   ): Promise<Return> {
     const iwpcTaskId = nanoid();
     const returnValue = new Promise<Return>((resolve, reject) => {
@@ -49,6 +69,21 @@ export class IwpcWindowAgent {
       );
       this._iwpcRejectmap.set(iwpcTaskId, reject);
     });
+    this._iwpcPromiseMap.set(iwpcTaskId, returnValue);
+
+    setTimeout(() => {
+      this._iwpcPromiseMap.get(iwpcTaskId)?.catch(() => {
+        this._error(
+          '⏱ Procedure call timed out.',
+          `processId: ${processId}`,
+          `taskId: ${iwpcTaskId}`,
+          `requester: ${this._ownerWindowId}`,
+          `processor: ${this._windowId}`
+        );
+        this._cleanupIwpcMap(iwpcTaskId);
+      });
+      this._iwpcRejectmap.get(iwpcTaskId)?.();
+    }, options?.timeout ?? IWPC_PROCESS_TIMEOUT);
 
     const iwpcInvokeMessage: IwpcInvokeMessage = {
       type: 'INVOKE',
@@ -58,13 +93,14 @@ export class IwpcWindowAgent {
       senderWindowId: this._ownerWindowId,
       args: args
     };
-
     this._iwpcTopic.publish(iwpcInvokeMessage);
-
-    setTimeout(() => {
-      this._iwpcRejectmap.get(iwpcTaskId)?.();
-      this._cleanupIwpcMap(iwpcTaskId);
-    }, IWPC_PROCESS_TIMEOUT);
+    this._log(
+      '↪ Requested a procedural call.',
+      `processId: ${processId}`,
+      `taskId: ${iwpcTaskId}`,
+      `requester: ${this._ownerWindowId}`,
+      `processor: ${this._windowId}`
+    );
 
     return returnValue;
   }
@@ -77,11 +113,23 @@ export class IwpcWindowAgent {
       return;
     }
     this._iwpcResolveMap.get(message.iwpcTaskId)?.(message.returnValue);
+    this._log(
+      '↩ The result of the procedure call was received and returned to the invoker.',
+      `processId: ${message.processId}`,
+      `taskId: ${message.iwpcTaskId}`,
+      `requester: ${this._ownerWindowId}`,
+      `processor: ${message.senderWindowId}`
+    );
     this._cleanupIwpcMap(message.iwpcTaskId);
   }
 
   private _cleanupIwpcMap(iwpcTaskId: string) {
+    this._iwpcPromiseMap.delete(iwpcTaskId);
     this._iwpcResolveMap.delete(iwpcTaskId);
     this._iwpcRejectmap.delete(iwpcTaskId);
+    this._log(
+      '🗑 The task has been completed and the items associated with the process have been deleted.',
+      `taskId: ${iwpcTaskId}`
+    );
   }
 }

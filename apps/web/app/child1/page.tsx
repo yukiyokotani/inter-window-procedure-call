@@ -5,13 +5,12 @@ import { useCallback, useEffect, useState } from 'react';
 const INCREMENT_COUNTER = 'INCREMENT_COUNTER';
 
 export default function Page(): JSX.Element {
-  const iwpcWindow = useIwpcWindow();
+  const iwpcWindow = useIwpcWindow({ debug: true });
   const [count, setCount] = useState(0);
 
   const incrementCounter = useCallback(() => {
-    console.log('increment called', iwpcWindow);
     setCount((count) => ++count);
-  }, [iwpcWindow]);
+  }, []);
 
   useEffect(() => {
     iwpcWindow?.register(INCREMENT_COUNTER, incrementCounter);

@@ -10,9 +10,14 @@ import {
   RecievedWindowId
 } from './iwpcMessage';
 import { IwpcWindowAgent } from './iwpcWindowAgent';
+import { Logger } from './logger';
 import { messageEventSourceIsWindow } from './util';
 
-type ChildWindowOption = {
+export type IwpcOptions = {
+  debug?: boolean;
+};
+
+type ChildWindowOptions = {
   target?: string | undefined;
   width?: number;
   height?: number;
@@ -20,7 +25,9 @@ type ChildWindowOption = {
   top?: number;
 };
 
-export class IwpcWindow {
+export class IwpcWindow extends Logger {
+  private _options?: IwpcOptions;
+
   // window
   private _window: Window;
   private _windowId: string;
@@ -53,7 +60,9 @@ export class IwpcWindow {
   ) => void | undefined;
   private _rejectReady?: (reason?: unknown) => void | undefined;
 
-  constructor(window: Window) {
+  constructor(window: Window, options?: IwpcOptions) {
+    super(options?.debug === true);
+    this._options = options;
     this._window = window;
     this._windowId = nanoid();
     this._parentWindow = window.opener;
@@ -66,7 +75,7 @@ export class IwpcWindow {
       this._rejectReady = reject;
     });
     this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
-    this.initialize();
+    this._log('⚙️ Constructor executed,', `This windowId: ${this._windowId}`);
   }
 
   get window() {
@@ -90,8 +99,9 @@ export class IwpcWindow {
   }
 
   public async initialize() {
-    console.log(this._windowId);
+    // Subscribe Iwpc Topic
     this._iwpcTopic.subscribe(this._invokeMessageSubscriber.bind(this));
+
     // Add EventListener
     this.window.addEventListener(
       'message',
@@ -101,16 +111,22 @@ export class IwpcWindow {
       'message',
       this._receivedWindowIdMessageHandler.bind(this)
     );
+    this._debug('⚙️ EventListeners have been registered.');
 
     if (this._parentWindow === null) {
-      console.warn(
-        'Initialization as an IwpcWindow was skipped because the parent window does not exist.'
+      this._warn(
+        '⚙️ Initialization as an IwpcWindow was skipped because the parent window does not exist.'
       );
       this._resolveReady?.(true);
       return;
     }
 
     setTimeout(() => {
+      this._ready.catch(() => {
+        this._error(
+          '🆔⏱ The process timed out without receiving a message of ID receipt from the parent window.'
+        );
+      });
       this._rejectReady?.();
     }, INITIALIZATION_TIMEOUT);
 
@@ -122,7 +138,7 @@ export class IwpcWindow {
       notifyIdMessage,
       this._window.location.origin
     );
-    console.log('🌟 Notification', this._windowId);
+    this._log('🆔📮 ID notification message sent to parentwindow.');
   }
 
   public async register(
@@ -138,7 +154,7 @@ export class IwpcWindow {
 
   public async open(
     path: string,
-    options?: ChildWindowOption
+    options?: ChildWindowOptions
   ): Promise<IwpcWindowAgent> {
     await this._ready;
     const target = options?.target ?? '_blank';
@@ -181,6 +197,7 @@ export class IwpcWindow {
       'message',
       this._receivedWindowIdMessageHandler.bind(this)
     );
+    this._log('🗑 dispose excecuted', `windowId: ${this._windowId}`);
   }
 
   public close() {
@@ -188,7 +205,7 @@ export class IwpcWindow {
     this._window.close();
   }
 
-  private _createChildWindowFeatures(options?: ChildWindowOption) {
+  private _createChildWindowFeatures(options?: ChildWindowOptions) {
     const featureLeft = `left=${options?.left ?? 0}`;
     const featureTop = `top=${options?.top ?? 0}`;
     const featureWidth = `width=${options?.width ?? 800}`;
@@ -208,11 +225,18 @@ export class IwpcWindow {
       return;
     }
     if (!message.source || !messageEventSourceIsWindow(message.source)) {
+      this._debug(
+        '🆔📬 A message of ID notification is received from the child window, but the message is ignored because the message source is not a window.'
+      );
       return;
     }
     if (message.source === this.window) {
+      this._debug(
+        '🆔📬 A message of ID notification is received from the child window, but the message is ignored because the destination of the message is not this window.'
+      );
       return;
     }
+    this._log('🆔📬 ID notification received from child window.');
     const childWindowId = message.data.myWindowId;
     const childWindow = message.source;
     this._childWindowIdMap?.set(childWindowId, childWindow);
@@ -226,9 +250,11 @@ export class IwpcWindow {
     const iwpcWindow = new IwpcWindowAgent(
       childWindow,
       childWindowId,
-      this._windowId
+      this._windowId,
+      { debug: this._options?.debug }
     );
     this._childWindowResolveMap?.get(childWindow)?.(iwpcWindow);
+    this._log('🆔📮 Message of ID receipt sent to child window.');
   }
 
   private _receivedWindowIdMessageHandler(
@@ -238,19 +264,29 @@ export class IwpcWindow {
       return;
     }
     if (!message.source || !messageEventSourceIsWindow(message.source)) {
+      this._debug(
+        '🆔📬 A message of ID receipt is received from the parent window, but the message is ignored because the message source is not a window.'
+      );
       return;
     }
     if (message.source === this._window) {
+      this._debug(
+        '🆔📬 A message of ID receipt is received from the parent window, but the message is ignored because the destination of the message is not this window.'
+      );
       return;
     }
+    this._log(
+      '🆔📬 It is confirmed that the parent window has successfully received the ID of this window.'
+    );
     this._parentWindowId = message.data.myWindowId;
     this._parentIwpcWindow = new IwpcWindowAgent(
       message.source,
       this._parentWindowId,
-      this._windowId
+      this._windowId,
+      { debug: this._options?.debug }
     );
-    console.log('🔥', message.data, this._parentIwpcWindow);
     this._resolveReady?.(true);
+    this._log("👾 The parent window's agent is now ready.");
   }
 
   private _invokeMessageSubscriber(message: IwpcMessage) {
@@ -260,11 +296,22 @@ export class IwpcWindow {
     if (message.type !== 'INVOKE') {
       return;
     }
-    console.log('invoke', message);
-    console.log(this._iwpcRegisteredProcessMap);
-    const returnValue = this._iwpcRegisteredProcessMap?.get(
-      message.processId
-    )?.(message.args);
+    this._log(
+      '↪ A procedure call was requested.',
+      `processId: ${message.processId}`,
+      `taskId: ${message.iwpcTaskId}`,
+      `requester: ${message.senderWindowId}`
+    );
+    const procedure = this._iwpcRegisteredProcessMap?.get(message.processId);
+    if (procedure === undefined) {
+      this._warn(
+        '↪ The requested procedure call is not registered.',
+        `processId: ${message.processId}`,
+        `taskId: ${message.iwpcTaskId}`,
+        `requester: ${message.senderWindowId}`
+      );
+    }
+    const returnValue = procedure?.(message.args);
     const iwpcReturnMessage: IwpcReturnMessage = {
       type: 'RETURN',
       iwpcTaskId: message.iwpcTaskId,
@@ -274,5 +321,11 @@ export class IwpcWindow {
       returnValue: returnValue
     };
     this._iwpcTopic.publish(iwpcReturnMessage);
+    this._log(
+      '↩ The results of the procedure call were returned.',
+      `processId: ${message.processId}`,
+      `taskId: ${message.iwpcTaskId}`,
+      `requester: ${message.senderWindowId}`
+    );
   }
 }
