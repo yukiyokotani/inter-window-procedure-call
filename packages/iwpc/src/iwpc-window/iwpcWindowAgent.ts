@@ -71,20 +71,6 @@ export class IwpcWindowAgent extends Logger {
     });
     this._iwpcPromiseMap.set(iwpcTaskId, returnValue);
 
-    setTimeout(() => {
-      this._iwpcPromiseMap.get(iwpcTaskId)?.catch(() => {
-        this._error(
-          '⏱ Procedure call timed out.',
-          `processId: ${processId}`,
-          `taskId: ${iwpcTaskId}`,
-          `requester: ${this._ownerWindowId}`,
-          `processor: ${this._windowId}`
-        );
-        this._cleanupIwpcMap(iwpcTaskId);
-      });
-      this._iwpcRejectmap.get(iwpcTaskId)?.();
-    }, options?.timeout ?? IWPC_PROCESS_TIMEOUT);
-
     const iwpcInvokeMessage: IwpcInvokeMessage = {
       type: 'INVOKE',
       iwpcTaskId: iwpcTaskId,
@@ -93,6 +79,15 @@ export class IwpcWindowAgent extends Logger {
       senderWindowId: this._ownerWindowId,
       args: args
     };
+
+    setTimeout(() => {
+      this._iwpcPromiseMap.get(iwpcTaskId)?.catch(() => {
+        this._error('⏱ Procedure call timed out.', iwpcInvokeMessage);
+        this._cleanupIwpcMap(iwpcTaskId);
+      });
+      this._iwpcRejectmap.get(iwpcTaskId)?.();
+    }, options?.timeout ?? IWPC_PROCESS_TIMEOUT);
+
     this._iwpcTopic.publish(iwpcInvokeMessage);
     this._log('↪ Requested a procedural call.', iwpcInvokeMessage);
 

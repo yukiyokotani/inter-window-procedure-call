@@ -36,13 +36,13 @@ export class IwpcWindow extends Logger {
   private _parentIwpcWindow: IwpcWindowAgent | undefined;
   private _childWindowIdMap: Map<string, Window> | undefined;
   private _childWindowResolveMap:
-    | Map<
+    | WeakMap<
         Window,
         (value: IwpcWindowAgent | PromiseLike<IwpcWindowAgent>) => void
       >
     | undefined;
   private _childWindowRejectMap:
-    | Map<Window, (reason?: unknown) => void>
+    | WeakMap<Window, (reason?: unknown) => void>
     | undefined;
 
   // Subscription
@@ -67,8 +67,8 @@ export class IwpcWindow extends Logger {
     this._windowId = nanoid();
     this._parentWindow = window.opener;
     this._childWindowIdMap = new Map();
-    this._childWindowResolveMap = new Map();
-    this._childWindowRejectMap = new Map();
+    this._childWindowResolveMap = new WeakMap();
+    this._childWindowRejectMap = new WeakMap();
     this._iwpcRegisteredProcessMap = new Map();
     this._ready = new Promise<boolean>((resolve, reject) => {
       this._resolveReady = resolve;
@@ -115,7 +115,7 @@ export class IwpcWindow extends Logger {
 
     if (this._parentWindow === null) {
       this._warn(
-        '⚠ Initialization as an IwpcWindow was skipped because the parent window does not exist.'
+        '⚙️ Initialization as an IwpcWindow was skipped because the parent window does not exist.'
       );
       this._resolveReady?.(true);
       return;
@@ -173,10 +173,13 @@ export class IwpcWindow extends Logger {
       this._childWindowRejectMap?.set(childWindow, reject);
     });
 
-    this.window.setTimeout(() => {
+    setTimeout(() => {
       rejectChildWindowInitialization?.(
         'Notification of id from child window timed out. The child window is closed because communication is not available.'
       );
+      if (childWindow) {
+        this._childWindowResolveMap?.delete(childWindow);
+      }
     }, INITIALIZATION_TIMEOUT);
 
     return iwpcChildWindow;
@@ -256,6 +259,7 @@ export class IwpcWindow extends Logger {
       { debug: this._options?.debug }
     );
     this._childWindowResolveMap?.get(childWindow)?.(iwpcWindow);
+    this._childWindowResolveMap?.delete(childWindow);
     this._log('🆔📮 Message of ID receipt sent to child window.');
   }
 
@@ -302,7 +306,7 @@ export class IwpcWindow extends Logger {
     const procedure = this._iwpcRegisteredProcessMap?.get(message.processId);
     if (procedure === undefined) {
       this._warn(
-        '⚠ The requested procedure call is not registered.',
+        'The requested procedure call is not registered.',
         `processId: ${message.processId}`,
         `taskId: ${message.iwpcTaskId}`,
         `requester: ${message.senderWindowId}`
@@ -322,5 +326,10 @@ export class IwpcWindow extends Logger {
       '↩ Sent a message of the result of the procedure call.',
       iwpcReturnMessage
     );
+  }
+
+  private _clearChildWindowPromiseMap(childWindow: Window) {
+    this._childWindowResolveMap?.delete(childWindow);
+    this._childWindowRejectMap?.delete(childWindow);
   }
 }
