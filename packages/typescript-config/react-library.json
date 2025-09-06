@@ -2,9 +2,14 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "display": "React Library",
   "extends": "./base.json",
-  "module": "ESNext",
-  "moduleResolution": "Bundler",
   "compilerOptions": {
-    "jsx": "react-jsx"
-  }
+    "jsx": "react-jsx",
+    "outDir": "dist", 
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false 
+  },
+  "include": ["src"],
+  "exclude": ["**/*.test.ts", "node_modules", "dist"]
 }

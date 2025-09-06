@@ -1,5 +1,5 @@
 'use client';
-import { IwpcWindowAgent, useIwpcWindow } from '@repo/iwpc/index';
+import { IwpcWindowAgent, useIwpcWindow } from '@silurus/iwpc/index';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const INCREMENT_COUNTER = 'INCREMENT_COUNTER';
