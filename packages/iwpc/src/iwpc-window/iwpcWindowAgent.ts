@@ -50,7 +50,7 @@ export class IwpcWindowAgent extends Logger {
   private _ownerWindowId: string;
 
   // Subscription
-  private _iwpcTopic: Topic<'IWPC', IwpcMessage>;
+  private _iwpcTopic: Topic<string, IwpcMessage>;
   private _iwpcSubscription: Subscription;
 
   // Pending invocations
@@ -63,7 +63,7 @@ export class IwpcWindowAgent extends Logger {
     window: Window | null,
     windowId: string,
     ownerWindowId: string,
-    iwpcTopic: Topic<'IWPC', IwpcMessage>,
+    iwpcTopic: Topic<string, IwpcMessage>,
     options?: IwpcAgentOptions
   ) {
     super(options?.debug === true);
