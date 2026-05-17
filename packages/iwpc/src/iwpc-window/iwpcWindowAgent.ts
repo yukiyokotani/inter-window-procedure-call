@@ -64,9 +64,17 @@ export class IwpcWindowAgent extends Logger {
     return this._windowId;
   }
 
-  public async invoke<Argument = unknown, Return = unknown>(
+  /**
+   * Invoke a procedure registered on the remote window.
+   *
+   * The two type parameters carry the call's input/output shape; they have
+   * no runtime effect. Apply the same types on the remote side's
+   * {@link IwpcWindow.register} call (typically by sharing a procedure-table
+   * type between the two windows) to keep them in sync.
+   */
+  public async invoke<Args = void, Return = unknown>(
     processId: string,
-    args?: Argument,
+    args?: Args,
     options?: InvokeOptions
   ): Promise<Return> {
     if (this._disposed) {

@@ -132,6 +132,53 @@ export default function ChildPage() {
 
 ---
 
+## Typing your procedures
+
+`register` and `invoke` both accept type parameters that describe the call's
+input and output shape. They have no runtime effect — they exist so that the
+two windows can share a procedure-table type and stay in sync at compile time.
+
+Define the table once and import it from both windows:
+
+```ts
+// shared/api.ts
+export type AppProcedures = {
+  INCREMENT_COUNTER: { args: void; return: void };
+  GREET: { args: { name: string }; return: string };
+  FETCH_USER: { args: number; return: { id: number; name: string } };
+};
+
+export type ProcArgs<K extends keyof AppProcedures> = AppProcedures[K]['args'];
+export type ProcReturn<K extends keyof AppProcedures> = AppProcedures[K]['return'];
+```
+
+Use it on the registering side:
+
+```ts
+import type { AppProcedures, ProcArgs, ProcReturn } from './shared/api';
+
+iwpcWindow.register<ProcArgs<'GREET'>, ProcReturn<'GREET'>>(
+  'GREET',
+  ({ name }) => `hello ${name}` // <- args is fully typed
+);
+```
+
+And on the invoking side:
+
+```ts
+const message = await agent.invoke<ProcArgs<'GREET'>, ProcReturn<'GREET'>>(
+  'GREET',
+  { name: 'world' }
+); // message is string
+```
+
+The library does not enforce a particular shape for your table — feel free to
+mix `Record`-of-procedures, discriminated unions, or per-procedure type aliases.
+Whatever you do, applying the same types on both sides is enough to catch
+mismatches at compile time.
+
+---
+
 ## Transports
 
 IWPC supports two transports for the initial window-id handshake. Procedure invocation itself always uses `BroadcastChannel`.
