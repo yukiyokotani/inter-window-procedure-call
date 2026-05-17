@@ -146,7 +146,8 @@ describe('IwpcWindow (postMessage transport)', () => {
       .invoke('BAD', undefined, { timeout: 500 })
       .catch((e) => e);
     expect(caught).toBeInstanceOf(Error);
-    expect((caught as Error).name).toBe('CustomBoom');
+    expect((caught as Error).name).toBe('IwpcRemoteError');
+    expect((caught as { remoteName?: string }).remoteName).toBe('CustomBoom');
     expect((caught as Error).message).toBe('boom');
   });
 
@@ -183,7 +184,7 @@ describe('IwpcWindow (postMessage transport)', () => {
       .invoke('NOPE', undefined, { timeout: 200 })
       .catch((e) => e);
     expect(caught).toBeInstanceOf(Error);
-    expect((caught as Error).name).toBe('IwpcProcedureNotFound');
+    expect((caught as Error).name).toBe('IwpcProcedureNotFoundError');
   });
 
   it('unregister stops a procedure from being callable', async () => {
@@ -203,7 +204,7 @@ describe('IwpcWindow (postMessage transport)', () => {
     const caught = await agent
       .invoke('PING', undefined, { timeout: 200 })
       .catch((e) => e);
-    expect((caught as Error).name).toBe('IwpcProcedureNotFound');
+    expect((caught as Error).name).toBe('IwpcProcedureNotFoundError');
   });
 
   it('rejects handshake messages from a different origin (security)', async () => {
