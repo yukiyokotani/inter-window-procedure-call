@@ -8,8 +8,7 @@ module.exports = {
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
     'prettier',
-    require.resolve('@vercel/style-guide/eslint/next'),
-    'turbo'
+    require.resolve('@vercel/style-guide/eslint/next')
   ],
   globals: {
     React: true,

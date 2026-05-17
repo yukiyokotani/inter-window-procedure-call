@@ -1,21 +1,26 @@
 'use client';
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { IwpcOptions, IwpcWindow } from '../iwpc-window/IwpcWindow';
+import { IwpcOptions, IwpcWindow } from '../iwpc-window/iwpcWindow';
 
 export const useIwpcWindow = (options?: IwpcOptions) => {
-  const [iwpcWindow] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return new IwpcWindow(window, options);
-    }
-  });
+  const [iwpcWindow, setIwpcWindow] = useState<IwpcWindow | undefined>(
+    undefined
+  );
+  // Keep the latest options without retriggering the connect effect.
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
-  useLayoutEffect(() => {
-    iwpcWindow?.initialize();
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const instance = new IwpcWindow(window, optionsRef.current);
+    instance.initialize();
+    setIwpcWindow(instance);
     return () => {
-      iwpcWindow?.dispose();
+      instance.dispose();
+      setIwpcWindow((current) => (current === instance ? undefined : current));
     };
-  }, [iwpcWindow]);
+  }, []);
 
   return iwpcWindow;
 };
