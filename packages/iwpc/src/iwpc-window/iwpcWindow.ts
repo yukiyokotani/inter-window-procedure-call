@@ -8,6 +8,11 @@ import {
   IWPC_PARENT_ID_QUERY_PARAM,
   IWPC_WINDOW_ID_QUERY_PARAM
 } from './constants';
+import {
+  IwpcDisposedError,
+  IwpcHandshakeError,
+  IwpcProcedureNotFoundError
+} from './errors';
 import { IwpcWindowAgent } from './iwpcWindowAgent';
 import { Logger } from './logger';
 import {
@@ -216,7 +221,7 @@ export class IwpcWindow extends Logger {
   ): Promise<IwpcWindowAgent> {
     await this._ready;
     if (this._disposed) {
-      throw new Error('IwpcWindow has been disposed.');
+      throw new IwpcDisposedError('IwpcWindow has been disposed.');
     }
 
     if (this._transport === 'broadcastChannel') {
@@ -235,7 +240,7 @@ export class IwpcWindow extends Logger {
     }
     // Reject ready if still pending; the catch attached in the constructor
     // swallows the rejection so callers that never awaited it stay safe.
-    this._rejectReady(new Error('IwpcWindow disposed.'));
+    this._rejectReady(new IwpcDisposedError('IwpcWindow disposed.'));
 
     this._invokeSubscription?.unsubscribe();
     this._readySubscription?.unsubscribe();
@@ -243,7 +248,7 @@ export class IwpcWindow extends Logger {
 
     for (const [, entry] of this._pendingChildren) {
       clearTimeout(entry.timer);
-      entry.reject(new Error('IwpcWindow disposed.'));
+      entry.reject(new IwpcDisposedError('IwpcWindow disposed.'));
     }
     this._pendingChildren.clear();
 
@@ -281,7 +286,9 @@ export class IwpcWindow extends Logger {
         '🆔⏱ The process timed out without receiving a message of ID receipt from the parent window.'
       );
       this._rejectReady(
-        new Error('IwpcWindow handshake with parent timed out.')
+        new IwpcHandshakeError(
+          'IwpcWindow handshake with parent timed out.'
+        )
       );
     }, INITIALIZATION_TIMEOUT);
 
@@ -308,7 +315,11 @@ export class IwpcWindow extends Logger {
     return new Promise<IwpcWindowAgent>((resolve, reject) => {
       const childWindow = this._window.open(path, target, features);
       if (!childWindow) {
-        reject(new Error('Could not obtain a reference to the child window.'));
+        reject(
+          new IwpcHandshakeError(
+            'Could not obtain a reference to the child window.'
+          )
+        );
         return;
       }
       this._childWindowResolveMap.set(childWindow, resolve);
@@ -318,7 +329,7 @@ export class IwpcWindow extends Logger {
           this._childWindowResolveMap.delete(childWindow);
           this._childWindowRejectMap.delete(childWindow);
           reject(
-            new Error(
+            new IwpcHandshakeError(
               'Notification of id from child window timed out. The child window is closed because communication is not available.'
             )
           );
@@ -455,7 +466,7 @@ export class IwpcWindow extends Logger {
     return new Promise<IwpcWindowAgent>((resolve, reject) => {
       const opened = this._window.open(url, target, features);
       if (!noopener && !opened) {
-        reject(new Error('Could not open the child window.'));
+        reject(new IwpcHandshakeError('Could not open the child window.'));
         return;
       }
 
@@ -463,7 +474,7 @@ export class IwpcWindow extends Logger {
         if (this._pendingChildren.has(childWindowId)) {
           this._pendingChildren.delete(childWindowId);
           reject(
-            new Error(
+            new IwpcHandshakeError(
               `Timed out waiting for child window ${childWindowId} to broadcast READY.`
             )
           );
@@ -542,6 +553,7 @@ export class IwpcWindow extends Logger {
         `taskId: ${message.iwpcTaskId}`,
         `requester: ${message.senderWindowId}`
       );
+      const notFound = new IwpcProcedureNotFoundError(message.processId);
       const errorReturn: IwpcReturnMessage = {
         type: 'RETURN',
         iwpcTaskId: message.iwpcTaskId,
@@ -550,8 +562,8 @@ export class IwpcWindow extends Logger {
         senderWindowId: this._windowId,
         returnValue: undefined,
         error: {
-          name: 'IwpcProcedureNotFound',
-          message: `Procedure not registered: ${message.processId}`
+          name: notFound.name,
+          message: notFound.message
         }
       };
       this._iwpcTopic.publish(errorReturn);

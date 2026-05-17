@@ -180,7 +180,8 @@ describe('IwpcWindowAgent.invoke', () => {
       (e) => e
     );
     expect(err).toBeInstanceOf(Error);
-    expect((err as Error).name).toBe('CustomFailure');
+    expect((err as Error).name).toBe('IwpcRemoteError');
+    expect((err as { remoteName?: string }).remoteName).toBe('CustomFailure');
     expect((err as Error).message).toBe('kaboom');
   });
 

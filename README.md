@@ -241,9 +241,55 @@ This diagram highlights:
 ## Notes
 
 * `register` / `unregister`: Manage procedures callable from other windows.
-* `invoke`: Sends arguments to a remote window and returns a Promise with the result. If the remote procedure throws, the promise rejects with an `Error` carrying the remote name/message. If the remote procedure is not registered, the promise rejects with an `IwpcProcedureNotFound` error.
+* `invoke`: Sends arguments to a remote window and returns a Promise with the result. See [Cancellation and error handling](#cancellation-and-error-handling) for failure modes.
 * IWPC handles window ID assignment, message routing, and timeouts automatically.
 * Enable `debug: true` to log all communication events.
+
+### Cancellation and error handling
+
+`invoke` accepts an `AbortSignal` and rejects with a discriminable error
+hierarchy.
+
+```ts
+import {
+  IwpcAbortError,
+  IwpcError,
+  IwpcProcedureNotFoundError,
+  IwpcRemoteError,
+  IwpcTimeoutError
+} from '@silurus/iwpc/index';
+
+const ac = new AbortController();
+setTimeout(() => ac.abort(), 1000); // cancel after 1s
+
+try {
+  const result = await agent.invoke('SLOW_FETCH', { url }, {
+    signal: ac.signal,
+    timeout: 5000
+  });
+} catch (e) {
+  if (e instanceof IwpcAbortError) {
+    // local cancellation; remote procedure may still complete on its side
+  } else if (e instanceof IwpcTimeoutError) {
+    // no RETURN within options.timeout ms — e.processId / e.timeoutMs are set
+  } else if (e instanceof IwpcProcedureNotFoundError) {
+    // remote has no procedure with this id — e.processId is set
+  } else if (e instanceof IwpcRemoteError) {
+    // the remote procedure threw — e.message is the remote message,
+    // e.remoteName is the remote error's name (e.g. 'TypeError')
+  } else if (e instanceof IwpcError) {
+    // any other IWPC-level failure (disposed, handshake, ...)
+  } else {
+    throw e; // not an IWPC error
+  }
+}
+```
+
+Important: `AbortSignal` cancels **the local waiting promise only**. Once the
+INVOKE message has been published, the remote procedure runs to completion on
+the remote side — there is no way to cancel it after the fact. Use `signal`
+to let the caller move on, and design remote procedures to be idempotent or
+short enough that this is acceptable.
 
 ### What can be passed as arguments and return values
 
