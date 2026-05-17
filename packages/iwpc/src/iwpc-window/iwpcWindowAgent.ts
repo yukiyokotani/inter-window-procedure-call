@@ -1,9 +1,10 @@
 import { nanoid } from 'nanoid';
 
+import { Subscription } from '../topic/subscription';
 import { Topic } from '../topic/topic';
 
 import { IWPC_PROCESS_TIMEOUT } from './constants';
-import { Logger } from './Logger';
+import { Logger } from './logger';
 import { IwpcInvokeMessage, IwpcMessage } from './message';
 
 export type IwpcAgentOptions = {
@@ -11,41 +12,48 @@ export type IwpcAgentOptions = {
 };
 
 type InvokeOptions = {
-  timeout: number;
+  timeout?: number;
 };
-export class IwpcWindowAgent extends Logger {
-  private _options?: IwpcAgentOptions;
 
+type PendingInvocation = {
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+export class IwpcWindowAgent extends Logger {
   // window
-  private _window: Window;
+  private _window: Window | null;
   private _windowId: string;
   private _ownerWindowId: string;
-  private _iwpcPromiseMap: Map<string, Promise<unknown>>;
-  private _iwpcResolveMap: Map<
-    string,
-    (value: unknown | PromiseLike<unknown>) => void
-  >;
-  private _iwpcRejectmap: Map<string, (reason?: unknown) => void>;
 
   // Subscription
   private _iwpcTopic: Topic<'IWPC', IwpcMessage>;
+  private _iwpcSubscription: Subscription;
+
+  // Pending invocations
+  private _pending: Map<string, PendingInvocation>;
+
+  // Status
+  private _disposed: boolean;
 
   constructor(
-    window: Window,
+    window: Window | null,
     windowId: string,
     ownerWindowId: string,
+    iwpcTopic: Topic<'IWPC', IwpcMessage>,
     options?: IwpcAgentOptions
   ) {
     super(options?.debug === true);
-    this._options = options;
     this._window = window;
     this._windowId = windowId;
     this._ownerWindowId = ownerWindowId;
-    this._iwpcPromiseMap = new Map();
-    this._iwpcResolveMap = new Map();
-    this._iwpcRejectmap = new Map();
-    this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
-    this._iwpcTopic.subscribe(this._returnMessageSubscriber.bind(this));
+    this._iwpcTopic = iwpcTopic;
+    this._pending = new Map();
+    this._disposed = false;
+    this._iwpcSubscription = this._iwpcTopic.subscribe(
+      this._returnMessageSubscriber.bind(this)
+    );
   }
 
   get window() {
@@ -58,18 +66,36 @@ export class IwpcWindowAgent extends Logger {
 
   public async invoke<Argument = unknown, Return = unknown>(
     processId: string,
-    args: Argument,
+    args?: Argument,
     options?: InvokeOptions
   ): Promise<Return> {
+    if (this._disposed) {
+      throw new Error('IwpcWindowAgent has been disposed.');
+    }
     const iwpcTaskId = nanoid();
+    const timeoutMs = options?.timeout ?? IWPC_PROCESS_TIMEOUT;
+
     const returnValue = new Promise<Return>((resolve, reject) => {
-      this._iwpcResolveMap.set(
-        iwpcTaskId,
-        resolve as unknown as (value: unknown | PromiseLike<unknown>) => void
-      );
-      this._iwpcRejectmap.set(iwpcTaskId, reject);
+      const timer = setTimeout(() => {
+        const entry = this._pending.get(iwpcTaskId);
+        if (!entry) return;
+        this._pending.delete(iwpcTaskId);
+        this._error(
+          '⏱ Procedure call timed out.',
+          `processId: ${processId}`,
+          `taskId: ${iwpcTaskId}`
+        );
+        entry.reject(
+          new Error(`IWPC procedure call timed out: ${processId}`)
+        );
+      }, timeoutMs);
+
+      this._pending.set(iwpcTaskId, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timer
+      });
     });
-    this._iwpcPromiseMap.set(iwpcTaskId, returnValue);
 
     const iwpcInvokeMessage: IwpcInvokeMessage = {
       type: 'INVOKE',
@@ -80,39 +106,39 @@ export class IwpcWindowAgent extends Logger {
       args: args
     };
 
-    setTimeout(() => {
-      this._iwpcPromiseMap.get(iwpcTaskId)?.catch(() => {
-        this._error('⏱ Procedure call timed out.', iwpcInvokeMessage);
-        this._cleanupIwpcMap(iwpcTaskId);
-      });
-      this._iwpcRejectmap.get(iwpcTaskId)?.();
-    }, options?.timeout ?? IWPC_PROCESS_TIMEOUT);
-
     this._iwpcTopic.publish(iwpcInvokeMessage);
     this._log('↪ Requested a procedural call.', iwpcInvokeMessage);
 
     return returnValue;
   }
 
-  private _returnMessageSubscriber(message: IwpcMessage) {
-    if (message.targetWindowId !== this._ownerWindowId) {
-      return;
+  public dispose() {
+    if (this._disposed) return;
+    this._disposed = true;
+    this._iwpcSubscription.unsubscribe();
+    for (const [, entry] of this._pending) {
+      clearTimeout(entry.timer);
+      entry.reject(new Error('IwpcWindowAgent disposed.'));
     }
-    if (message.type !== 'RETURN') {
-      return;
-    }
-    this._iwpcResolveMap.get(message.iwpcTaskId)?.(message.returnValue);
-    this._log('↩ Returned the results of the procedure call.', message);
-    this._cleanupIwpcMap(message.iwpcTaskId);
+    this._pending.clear();
   }
 
-  private _cleanupIwpcMap(iwpcTaskId: string) {
-    this._iwpcPromiseMap.delete(iwpcTaskId);
-    this._iwpcResolveMap.delete(iwpcTaskId);
-    this._iwpcRejectmap.delete(iwpcTaskId);
-    this._log(
-      '🗑 The task has been completed and the items associated with the process have been deleted.',
-      `taskId: ${iwpcTaskId}`
-    );
+  private _returnMessageSubscriber(message: IwpcMessage) {
+    if (message.type !== 'RETURN') return;
+    if (message.targetWindowId !== this._ownerWindowId) return;
+    if (message.senderWindowId !== this._windowId) return;
+    const entry = this._pending.get(message.iwpcTaskId);
+    if (!entry) return;
+    this._pending.delete(message.iwpcTaskId);
+    clearTimeout(entry.timer);
+    if (message.error) {
+      const err = new Error(message.error.message);
+      err.name = message.error.name;
+      entry.reject(err);
+      this._log('↩ Procedure call returned an error.', message);
+      return;
+    }
+    entry.resolve(message.returnValue);
+    this._log('↩ Returned the results of the procedure call.', message);
   }
 }

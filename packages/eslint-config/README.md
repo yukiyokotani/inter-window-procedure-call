@@ -1,3 +1,3 @@
-# `@turbo/eslint-config`
+# `@silurus/eslint-config`
 
 Collection of internal eslint configurations.

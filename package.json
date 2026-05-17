@@ -2,16 +2,16 @@
   "name": "inter-window-procedure-call",
   "private": true,
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "dev:web": "turbo dev --filter=web",
-    "lint": "turbo lint",
-    "lint:fix": "turbo lint -- --fix",
+    "build": "pnpm -r --parallel --if-present run build",
+    "dev": "pnpm -r --parallel --if-present run dev",
+    "dev:web": "pnpm --filter web run dev",
+    "lint": "pnpm -r --parallel --if-present run lint",
+    "lint:fix": "pnpm -r --parallel --if-present run lint -- --fix",
+    "test": "pnpm -r --if-present run test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {
     "prettier": "^3.2.5",
-    "turbo": "^2.0.6",
     "typescript": "^5.9.0"
   },
   "packageManager": "pnpm@8.15.6",
