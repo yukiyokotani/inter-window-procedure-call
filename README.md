@@ -203,6 +203,26 @@ Because the child has no `opener` reference, the two windows run in independent 
 
 The child window must be served from the same origin as the parent (a `BroadcastChannel` is same-origin only). Both windows must use the same transport setting.
 
+### Isolating from other apps on the same origin
+
+IWPC routes every procedure call through a `BroadcastChannel`, which delivers
+to **all** same-origin contexts listening on that channel name. The default
+channel name is `'IWPC'`, so two completely unrelated apps that both use this
+library will see each other's `INVOKE` / `RETURN` envelopes (the `targetWindowId` filter then
+drops them on the floor — but the args/return values were still serialized
+into the other app's tabs).
+
+Pin a channel name per app to avoid that:
+
+```ts
+const iwpcWindow = new IwpcWindow(window, {
+  channelName: 'myapp:iwpc' // any string; both windows must agree
+});
+```
+
+Both windows in a parent / child relationship must use the same `channelName`,
+otherwise no procedure call can succeed.
+
 ---
 
 ## Communication Flow

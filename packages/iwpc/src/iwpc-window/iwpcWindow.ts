@@ -26,6 +26,8 @@ import { messageEventSourceIsWindow } from './utils';
 
 export type IwpcTransport = 'postMessage' | 'broadcastChannel';
 
+export const DEFAULT_IWPC_CHANNEL_NAME = 'IWPC';
+
 export type IwpcOptions = {
   debug?: boolean;
   /**
@@ -38,6 +40,17 @@ export type IwpcOptions = {
    * Procedure invocation itself always uses BroadcastChannel.
    */
   transport?: IwpcTransport;
+  /**
+   * Name of the BroadcastChannel used to carry IWPC traffic. Defaults to
+   * `'IWPC'`. Pin this to an app-specific value (e.g. `'myapp:iwpc'`) to
+   * avoid collisions with other code on the same origin that also uses
+   * `@silurus/iwpc` — windows that do not share the same channel name
+   * cannot see each other's INVOKE / RETURN / READY messages.
+   *
+   * Both windows in a parent / child relationship must use the same
+   * channelName, otherwise no procedure call can succeed.
+   */
+  channelName?: string;
 };
 
 type ChildWindowOptions = {
@@ -82,7 +95,7 @@ export class IwpcWindow extends Logger {
   private _pendingChildren: Map<string, ChildPending>;
 
   // Subscription
-  private _iwpcTopic: Topic<'IWPC', IwpcMessage>;
+  private _iwpcTopic: Topic<string, IwpcMessage>;
   private _invokeSubscription: Subscription | undefined;
   private _readySubscription: Subscription | undefined;
 
@@ -128,7 +141,9 @@ export class IwpcWindow extends Logger {
       /* prevent unhandled rejection if no one awaits ready */
     });
 
-    this._iwpcTopic = new Topic<'IWPC', IwpcMessage>('IWPC');
+    this._iwpcTopic = new Topic<string, IwpcMessage>(
+      options?.channelName ?? DEFAULT_IWPC_CHANNEL_NAME
+    );
 
     if (this._transport === 'broadcastChannel') {
       const queryIds = this._readQueryParamIds();
@@ -168,6 +183,10 @@ export class IwpcWindow extends Logger {
 
   get transport() {
     return this._transport;
+  }
+
+  get channelName() {
+    return this._iwpcTopic.name;
   }
 
   get ready() {
