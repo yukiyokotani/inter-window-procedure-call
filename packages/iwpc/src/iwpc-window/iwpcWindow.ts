@@ -187,8 +187,23 @@ export class IwpcWindow extends Logger {
     }
   }
 
-  public register(processId: string, callback: (args: unknown) => unknown) {
-    this._iwpcRegisteredProcessMap.set(processId, callback);
+  /**
+   * Register a procedure callable from other windows.
+   *
+   * The type parameters constrain how the caller of this method sees the
+   * handler signature; they have no runtime effect. Pair them with matching
+   * type arguments on the remote `invoke<Args, Return>(...)` to keep both
+   * sides in sync — typically by importing the same procedure-table types in
+   * both windows.
+   */
+  public register<Args = unknown, Return = unknown>(
+    processId: string,
+    callback: (args: Args) => Return | Promise<Return>
+  ) {
+    this._iwpcRegisteredProcessMap.set(
+      processId,
+      callback as (args: unknown) => unknown
+    );
   }
 
   public unregister(processId: string) {
