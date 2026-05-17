@@ -198,6 +198,25 @@ This diagram highlights:
 * IWPC handles window ID assignment, message routing, and timeouts automatically.
 * Enable `debug: true` to log all communication events.
 
+### What can be passed as arguments and return values
+
+`invoke` arguments and return values are serialized with the [HTML structured
+clone algorithm](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm)
+before they cross the window boundary. This means:
+
+* Plain objects, arrays, `Map`, `Set`, `Date`, `RegExp`, typed arrays, and
+  `ArrayBuffer` round-trip as expected.
+* **Class identity is lost.** A `Foo` instance sent through `invoke` arrives on
+  the other side as a plain object with the same own enumerable properties;
+  `instanceof Foo` is `false` and methods on the prototype are not available.
+* **Functions cannot be sent.** Pass a `processId` registered on the other
+  window instead of a callback.
+* **DOM nodes cannot be sent.** A `Node` is bound to its `Document` and is not
+  portable across windows. Pass a serializable description (e.g. an id or
+  data object) and have the receiving window look it up locally.
+* `Error` instances round-trip with their `name` and `message` preserved, but
+  the prototype chain (custom subclasses) is not.
+
 ---
 
 ## Development
