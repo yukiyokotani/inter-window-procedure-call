@@ -31,12 +31,8 @@ export type IwpcReturnMessage = IwpcMessageBaseMessage & {
   error?: { name: string; message: string };
 };
 
-export type IwpcReadyMessage = {
-  type: 'READY';
-  senderWindowId: string;
-};
-
 export type IwpcMessage =
   | IwpcInvokeMessage
   | IwpcReturnMessage
-  | IwpcReadyMessage;
+  | NotifyWindowIdMessage
+  | ReceivedWindowIdMessage;

@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeWindow, flush } from '../test-helpers/fakeWindow';
+import { Topic } from '../topic/topic';
 
-import {
-  IWPC_PARENT_ID_QUERY_PARAM,
-  IWPC_WINDOW_ID_QUERY_PARAM
-} from './constants';
+import { IWPC_WINDOW_ID_QUERY_PARAM } from './constants';
 import { DEFAULT_IWPC_CHANNEL_NAME, IwpcWindow } from './iwpcWindow';
+import { IwpcMessage } from './message';
 
 const live: IwpcWindow[] = [];
 
@@ -70,7 +69,7 @@ describe('IwpcOptions.channelName', () => {
     );
     wrongIwpc.initialize();
 
-    await expect(openPromiseA).rejects.toThrow(/READY/);
+    await expect(openPromiseA).rejects.toThrow(/NOTIFY/);
   }, 10000);
 
   it('end-to-end works when both parent and child agree on a custom channelName (broadcastChannel transport)', async () => {
@@ -110,10 +109,7 @@ describe('IwpcOptions.channelName', () => {
   });
 
   it('invocation does not cross channelName boundaries even when targetWindowId matches', async () => {
-    // Two parents on different channels with intentionally colliding
-    // window-id values. This is the worst-case privacy concern that
-    // channelName fixes.
-
+    // iwpcA listens on channel-a with windowId="collision".
     const parentA = new FakeWindow();
     parentA.setSearch(`${IWPC_WINDOW_ID_QUERY_PARAM}=collision`);
     const iwpcA = tracked(
@@ -123,30 +119,26 @@ describe('IwpcOptions.channelName', () => {
       })
     );
     iwpcA.initialize();
+    // iwpcA's ready will reject (no parent to ack); that's irrelevant — the
+    // INVOKE subscription is wired in initialize() regardless.
+    iwpcA.ready.catch(() => undefined);
 
-    const parentB = new FakeWindow();
-    parentB.setSearch(
-      `${IWPC_WINDOW_ID_QUERY_PARAM}=anything&${IWPC_PARENT_ID_QUERY_PARAM}=collision`
-    );
-    const iwpcB = tracked(
-      new IwpcWindow(parentB as unknown as Window, {
-        transport: 'broadcastChannel',
-        channelName: 'channel-b'
-      })
-    );
-    iwpcB.initialize();
-    await iwpcB.ready;
-
-    // iwpcA registers a procedure. Since iwpcB is on a different channel it
-    // should not be able to reach it.
     const handler = vi.fn(() => 'should-not-fire');
     iwpcA.register('SECRET', handler);
 
-    await expect(
-      iwpcB.parentIwpcWindow?.invoke('SECRET', undefined, {
-        timeout: 200
-      })
-    ).rejects.toBeDefined();
+    // Publish an INVOKE on channel-b targeted at windowId="collision". If
+    // channelName isolation works, iwpcA on channel-a must not see it.
+    const topicB = new Topic<string, IwpcMessage>('channel-b');
+    topicB.publish({
+      type: 'INVOKE',
+      iwpcTaskId: 'task-1',
+      processId: 'SECRET',
+      targetWindowId: 'collision',
+      senderWindowId: 'other',
+      args: undefined
+    });
+    await flush();
+    topicB.close();
 
     expect(handler).not.toHaveBeenCalled();
   });
