@@ -1,15 +1,74 @@
 {
   "name": "@silurus/iwpc",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Type-safe RPC between browser windows, tabs, and popups. Choose postMessage or BroadcastChannel transport.",
+  "license": "MIT",
+  "author": {
+    "name": "Yuki Yokotani",
+    "url": "https://github.com/yukiyokotani"
+  },
+  "homepage": "https://iwpc.silurus.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yukiyokotani/inter-window-procedure-call.git",
+    "directory": "packages/iwpc"
+  },
+  "bugs": {
+    "url": "https://github.com/yukiyokotani/inter-window-procedure-call/issues"
+  },
+  "keywords": [
+    "rpc",
+    "ipc",
+    "postmessage",
+    "broadcastchannel",
+    "window",
+    "popup",
+    "iframe",
+    "cross-window",
+    "react",
+    "typescript"
+  ],
   "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
-    "./index": "./src/index.ts"
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
   },
   "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "nanoid": "^5.0.7"
   },
   "devDependencies": {
     "@silurus/eslint-config": "workspace:*",
@@ -22,12 +81,10 @@
     "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^8.57.0",
     "happy-dom": "^15.11.7",
+    "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "tsup": "^8.3.5",
     "typescript": "^5.3.3",
     "vitest": "^2.1.9"
-  },
-  "dependencies": {
-    "nanoid": "^5.0.7",
-    "react": "^18.2.0"
   }
 }
