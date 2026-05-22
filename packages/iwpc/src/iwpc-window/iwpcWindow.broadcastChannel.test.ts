@@ -196,6 +196,70 @@ describe('IwpcWindow (broadcastChannel transport)', () => {
     expect(result).toBe(42);
   });
 
+  it('re-acks a reloaded child so the new instance can re-establish its parent agent', async () => {
+    const parent = new FakeWindow();
+    const parentIwpc = trackedIwpc(parent);
+    parentIwpc.initialize();
+    await parentIwpc.ready;
+
+    let capturedUrl = '';
+    parent.open = vi.fn((url) => {
+      capturedUrl = url ?? '';
+      return null;
+    });
+
+    // Initial pairing.
+    const openPromise = parentIwpc.open('/child');
+    await flush();
+
+    const childSearch = capturedUrl.slice(capturedUrl.indexOf('?'));
+    const originalChild = new FakeWindow();
+    originalChild.setSearch(childSearch);
+    const originalChildIwpc = trackedIwpc(originalChild);
+    originalChildIwpc.initialize();
+
+    const agent = await openPromise;
+    await originalChildIwpc.ready;
+    const childWindowId = originalChildIwpc.windowId;
+
+    // Parent registers a procedure; child can call it via its parent agent.
+    parentIwpc.register('PING', () => 'pong-1');
+    await expect(
+      originalChildIwpc.parentIwpcWindow?.invoke<void, string>('PING', undefined, {
+        timeout: 500
+      })
+    ).resolves.toBe('pong-1');
+
+    // Simulate a child-side reload: dispose the old child and spin up a new
+    // IwpcWindow on a new FakeWindow with the same query string. The parent
+    // remains alive.
+    originalChildIwpc.dispose();
+
+    const reloadedChild = new FakeWindow();
+    reloadedChild.setSearch(childSearch);
+    const reloadedChildIwpc = trackedIwpc(reloadedChild);
+    reloadedChildIwpc.initialize();
+
+    await reloadedChildIwpc.ready;
+    expect(reloadedChildIwpc.windowId).toBe(childWindowId);
+    expect(reloadedChildIwpc.parentWindowId).toBe(parentIwpc.windowId);
+
+    // The parent's existing agent (returned earlier) still points to the same
+    // childWindowId and can reach the reloaded child.
+    reloadedChildIwpc.register('GREET', (name) => `hi ${name as string}`);
+    await expect(
+      agent.invoke<string, string>('GREET', 'world', { timeout: 500 })
+    ).resolves.toBe('hi world');
+
+    // And the reloaded child can still call the parent.
+    parentIwpc.register('PING', () => 'pong-2');
+    await expect(
+      reloadedChildIwpc.parentIwpcWindow?.invoke<void, string>('PING', undefined, {
+        timeout: 500
+      })
+    ).resolves.toBe('pong-2');
+  });
+
   it('rejects open() when the child never broadcasts NOTIFY_WINDOW_ID', async () => {
     const parent = new FakeWindow();
     const parentIwpc = trackedIwpc(parent);
