@@ -136,7 +136,10 @@ describe('Topic', () => {
 });
 
 async function flushChannel(): Promise<void> {
-  // BroadcastChannel delivery happens via the event loop. Two microtask
-  // turns plus a macrotask is enough in practice.
-  await new Promise<void>((r) => setTimeout(r, 0));
+  // BroadcastChannel delivery happens via the event loop. One macrotask is
+  // usually enough locally; loop a few times so the slower CI runners have
+  // time to deliver.
+  for (let i = 0; i < 5; i++) {
+    await new Promise<void>((r) => setTimeout(r, 0));
+  }
 }
