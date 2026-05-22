@@ -93,6 +93,13 @@ export class IwpcWindow extends Logger {
 
   // broadcastChannel transport bookkeeping
   private _pendingChildren: Map<string, ChildPending>;
+  // Child ids this parent has already paired with at least once. Used to
+  // re-ack a child that re-broadcasts NOTIFY_WINDOW_ID after a reload, so the
+  // child can rebuild its parent agent without the parent regenerating ids.
+  private _spawnedChildIds: Set<string>;
+  // The agents this parent has handed out per child id, so a reload re-ack
+  // does not allocate a new agent that would shadow the one held by callers.
+  private _childAgents: Map<string, IwpcWindowAgent>;
 
   // Subscription
   private _iwpcTopic: Topic<string, IwpcMessage>;
@@ -124,6 +131,8 @@ export class IwpcWindow extends Logger {
     this._childWindowResolveMap = new WeakMap();
     this._childWindowRejectMap = new WeakMap();
     this._pendingChildren = new Map();
+    this._spawnedChildIds = new Set();
+    this._childAgents = new Map();
     this._iwpcRegisteredProcessMap = new Map();
     this._initialized = false;
     this._disposed = false;
@@ -266,6 +275,12 @@ export class IwpcWindow extends Logger {
       entry.reject(new IwpcDisposedError('IwpcWindow disposed.'));
     }
     this._pendingChildren.clear();
+
+    for (const [, agent] of this._childAgents) {
+      agent.dispose();
+    }
+    this._childAgents.clear();
+    this._spawnedChildIds.clear();
 
     this._iwpcTopic.close();
     this._iwpcRegisteredProcessMap.clear();
@@ -509,8 +524,11 @@ export class IwpcWindow extends Logger {
     if (message.type === 'NOTIFY_WINDOW_ID') {
       const childWindowId = message.myWindowId;
       if (childWindowId === this._windowId) return;
+
       const pending = this._pendingChildren.get(childWindowId);
-      if (!pending) return;
+      const isReload =
+        pending === undefined && this._spawnedChildIds.has(childWindowId);
+      if (pending === undefined && !isReload) return;
 
       const ack: ReceivedWindowIdMessage = {
         type: 'RECEIVED_WINDOW_ID',
@@ -519,17 +537,25 @@ export class IwpcWindow extends Logger {
       };
       this._iwpcTopic.publish(ack);
 
-      this._pendingChildren.delete(childWindowId);
-      clearTimeout(pending.timer);
-      const agent = new IwpcWindowAgent(
-        null,
-        childWindowId,
-        this._windowId,
-        this._iwpcTopic,
-        { debug: this._options?.debug }
-      );
-      pending.resolve(agent);
-      this._log('🆔📬 NOTIFY received; acked child.', childWindowId);
+      if (pending !== undefined) {
+        this._pendingChildren.delete(childWindowId);
+        clearTimeout(pending.timer);
+        const agent = new IwpcWindowAgent(
+          null,
+          childWindowId,
+          this._windowId,
+          this._iwpcTopic,
+          { debug: this._options?.debug }
+        );
+        this._spawnedChildIds.add(childWindowId);
+        this._childAgents.set(childWindowId, agent);
+        pending.resolve(agent);
+        this._log('🆔📬 NOTIFY received; acked child.', childWindowId);
+      } else {
+        // Reload: the child re-broadcast NOTIFY after we already paired with
+        // it. Keep the existing agent so callers' references stay valid.
+        this._log('🆔📬 NOTIFY received; re-acked reloaded child.', childWindowId);
+      }
       return;
     }
 
