@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Type-safe RPC between browser windows, tabs, and popups. Choose postMessage or BroadcastChannel transport.",
   "license": "MIT",
-  "author": "Yuki Yokotani <yokotani.yuki@gmail.com>",
+  "author": {
+    "name": "Yuki Yokotani",
+    "url": "https://github.com/yukiyokotani"
+  },
   "homepage": "https://iwpc.silurus.dev",
   "repository": {
     "type": "git",
