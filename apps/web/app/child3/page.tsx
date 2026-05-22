@@ -1,6 +1,6 @@
 'use client';
 
-import { useIwpcWindow } from '@silurus/iwpc/index';
+import { useIwpcWindow } from '@silurus/iwpc';
 import { AlertTriangle, Check, Send, X } from 'lucide-react';
 import {
   Suspense,

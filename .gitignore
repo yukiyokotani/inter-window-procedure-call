@@ -36,3 +36,6 @@ yarn-error.log*
 
 # Claude Code local config
 .claude/
+
+# Package build outputs
+packages/*/dist

@@ -1,6 +1,6 @@
 'use client';
 
-import { useIwpcWindow } from '@silurus/iwpc/index';
+import { useIwpcWindow } from '@silurus/iwpc';
 import {
   AlertTriangle,
   Check,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
+import { CodeBlock } from '@/components/code-block';
 import {
   Card,
   CardContent,
@@ -20,6 +21,43 @@ import {
 } from '@/components/ui/card';
 import { WindowFrame } from '@/components/window-frame';
 import { PROCEDURES } from '@/lib/procedures';
+
+const PARENT_SNIPPET = `// Parent: open the popup and await a typed value.
+const child = await iwpc.open(\`./child3?kind=color\`, {
+  width: 520,
+  height: 540
+});
+
+const hex = await child.invoke<void, string | null>(
+  'PICK_COLOR',
+  undefined,
+  { timeout: 5 * 60 * 1000 } // generous, the user is in the loop
+);
+
+if (hex === null) {
+  // user cancelled
+} else {
+  setColor(hex);
+}`;
+
+const CHILD_SNIPPET = `// Child: turn a user interaction into a procedure return value.
+const resolverRef = useRef<((v: string | null) => void) | null>(null);
+
+useEffect(() => {
+  iwpc?.register('PICK_COLOR', () => {
+    return new Promise<string | null>((resolve) => {
+      resolverRef.current = resolve;
+    });
+  });
+  return () => iwpc?.unregister('PICK_COLOR');
+}, [iwpc]);
+
+const onPick = (hex: string) => {
+  resolverRef.current?.(hex);
+  resolverRef.current = null;
+  // Let the RETURN message flush over BroadcastChannel, then tear down.
+  setTimeout(() => iwpc?.close(), 120);
+};`;
 
 type Result =
   | { kind: 'color'; value: string | null }
@@ -147,6 +185,20 @@ export default function Page() {
         </CardHeader>
         <CardContent>
           <ResultDisplay result={result} />
+        </CardContent>
+      </Card>
+
+      <Card className='bg-card/60 backdrop-blur'>
+        <CardHeader>
+          <CardTitle>Code</CardTitle>
+          <CardDescription>
+            Both sides of the pattern. The parent awaits a typed value;
+            the child turns user interaction into a procedure return.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='flex flex-col gap-3'>
+          <CodeBlock code={PARENT_SNIPPET} filename='parent.tsx' />
+          <CodeBlock code={CHILD_SNIPPET} filename='child.tsx' />
         </CardContent>
       </Card>
     </WindowFrame>

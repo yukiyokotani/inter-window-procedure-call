@@ -1,9 +1,10 @@
 'use client';
 
-import { IwpcWindowAgent, useIwpcWindow } from '@silurus/iwpc/index';
+import { IwpcWindowAgent, useIwpcWindow } from '@silurus/iwpc';
 import { ExternalLink, Minus, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { CodeBlock } from '@/components/code-block';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,6 +15,22 @@ import {
 } from '@/components/ui/card';
 import { WindowFrame } from '@/components/window-frame';
 import { PROCEDURES } from '@/lib/procedures';
+
+const SNIPPET = `import { useIwpcWindow } from '@silurus/iwpc';
+
+const iwpc = useIwpcWindow({
+  transport: 'broadcastChannel',
+  // channelName: 'myapp:iwpc', // pin per app to avoid origin-wide collisions
+});
+
+useEffect(() => {
+  iwpc?.register('INCREMENT_COUNTER', () => setCount((c) => c + 1));
+  return () => iwpc?.unregister('INCREMENT_COUNTER');
+}, [iwpc]);
+
+// noopener by default — no Window reference between the two sides.
+const child = await iwpc?.open('./child2', { width: 520, height: 540 });
+child?.invoke('INCREMENT_COUNTER');`;
 
 export default function Page() {
   const iwpcWindow = useIwpcWindow({
@@ -116,6 +133,19 @@ export default function Page() {
             <Plus className='size-4' />
             Increment child remotely
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className='bg-card/60 backdrop-blur'>
+        <CardHeader>
+          <CardTitle>Code</CardTitle>
+          <CardDescription>
+            Same shape as the postMessage demo — only the transport
+            option changes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock code={SNIPPET} filename='parent.tsx' />
         </CardContent>
       </Card>
     </WindowFrame>

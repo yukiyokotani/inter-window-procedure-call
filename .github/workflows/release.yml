@@ -1,0 +1,53 @@
+name: Release
+
+# Publishes @silurus/iwpc to npm whenever a tag matching `v*.*.*` is pushed.
+# The tag must match the `version` field in packages/iwpc/package.json.
+#
+# Required secrets:
+#   NPM_TOKEN — an automation token from https://www.npmjs.com/settings/<account>/tokens
+#               with publish access to the @silurus scope.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg_version=$(node -p "require('./packages/iwpc/package.json').version")
+          if [ "$tag" != "$pkg_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $pkg_version" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: pnpm -r --filter @silurus/iwpc test
+
+      - name: Publish
+        working-directory: packages/iwpc
+        run: pnpm publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

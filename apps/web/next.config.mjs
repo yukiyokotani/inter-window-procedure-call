@@ -2,10 +2,11 @@
 const nextConfig = {
   output: 'export',
   distDir: 'out',
+  // Custom domain (iwpc.silurus.dev) hosts the site at the root, so no
+  // basePath is needed even when deployed to GitHub Pages.
   images: {
     unoptimized: true
-  },
-  basePath: process.env.GITHUB_PAGES ? '/<REPO_NAME>' : ''
+  }
 };
 
 export default nextConfig;

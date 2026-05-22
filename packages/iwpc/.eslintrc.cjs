@@ -7,5 +7,5 @@ module.exports = {
     project: './tsconfig.lint.json',
     tsconfigRootDir: __dirname
   },
-  ignorePatterns: ['**/*.cjs', 'vitest.config.ts']
+  ignorePatterns: ['**/*.cjs', 'vitest.config.ts', 'tsup.config.ts', 'dist']
 };

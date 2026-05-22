@@ -1,9 +1,10 @@
 'use client';
 
-import { useIwpcWindow } from '@silurus/iwpc/index';
+import { useIwpcWindow } from '@silurus/iwpc';
 import { Plus, Power, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
+import { CodeBlock } from '@/components/code-block';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,6 +15,19 @@ import {
 } from '@/components/ui/card';
 import { WindowFrame } from '@/components/window-frame';
 import { PROCEDURES } from '@/lib/procedures';
+
+const SNIPPET = `import { useIwpcWindow } from '@silurus/iwpc';
+
+const iwpc = useIwpcWindow();
+
+// Same shape as the parent — register a local procedure...
+useEffect(() => {
+  iwpc?.register('INCREMENT_COUNTER', () => setCount((c) => c + 1));
+  return () => iwpc?.unregister('INCREMENT_COUNTER');
+}, [iwpc]);
+
+// ...and invoke procedures on the parent.
+iwpc?.parentIwpcWindow?.invoke('INCREMENT_COUNTER');`;
 
 export default function Page() {
   const iwpcWindow = useIwpcWindow({ debug: true });
@@ -97,6 +111,16 @@ export default function Page() {
             <X className='size-4' />
             close()
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className='bg-card/60 backdrop-blur'>
+        <CardHeader>
+          <CardTitle>Code</CardTitle>
+          <CardDescription>The child side, in full.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock code={SNIPPET} filename='child.tsx' />
         </CardContent>
       </Card>
     </WindowFrame>

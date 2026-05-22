@@ -1,6 +1,7 @@
 import { ArrowRight, MessagesSquare, Radio, Repeat } from 'lucide-react';
 import Link from 'next/link';
 
+import { CodeBlock } from '@/components/code-block';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,10 +53,37 @@ export default function Home() {
       <div className='relative mx-auto flex max-w-5xl flex-col gap-16 px-6 py-10 sm:py-16'>
         <Nav />
         <Hero />
+        <QuickStart />
         <Demos />
         <Footer />
       </div>
     </div>
+  );
+}
+
+const QUICK_START = `import { useIwpcWindow } from '@silurus/iwpc';
+
+// Parent
+const iwpc = useIwpcWindow();
+const child = await iwpc?.open('./child');
+const name = await child.invoke<void, string>('ASK_NAME');
+
+// Child
+iwpc?.register('ASK_NAME', () => prompt('What is your name?') ?? '');`;
+
+function QuickStart() {
+  return (
+    <section className='flex flex-col gap-4'>
+      <div className='flex flex-col gap-2'>
+        <span className='font-mono text-xs uppercase tracking-widest text-muted-foreground'>
+          Quick start
+        </span>
+        <h2 className='text-2xl font-semibold tracking-tight sm:text-3xl'>
+          Register on one side. Invoke from the other.
+        </h2>
+      </div>
+      <CodeBlock code={QUICK_START} filename='example.ts' />
+    </section>
   );
 }
 

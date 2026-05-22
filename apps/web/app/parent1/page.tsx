@@ -1,9 +1,10 @@
 'use client';
 
-import { IwpcWindowAgent, useIwpcWindow } from '@silurus/iwpc/index';
+import { IwpcWindowAgent, useIwpcWindow } from '@silurus/iwpc';
 import { ExternalLink, Minus, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { CodeBlock } from '@/components/code-block';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,6 +15,20 @@ import {
 } from '@/components/ui/card';
 import { WindowFrame } from '@/components/window-frame';
 import { PROCEDURES } from '@/lib/procedures';
+
+const SNIPPET = `import { useIwpcWindow } from '@silurus/iwpc';
+
+const iwpc = useIwpcWindow();
+
+// Register a procedure callers can invoke on this window.
+useEffect(() => {
+  iwpc?.register('INCREMENT_COUNTER', () => setCount((c) => c + 1));
+  return () => iwpc?.unregister('INCREMENT_COUNTER');
+}, [iwpc]);
+
+// Open a child window and invoke its procedure remotely.
+const child = await iwpc?.open('./child1', { width: 520, height: 540 });
+child?.invoke('INCREMENT_COUNTER');`;
 
 export default function Page() {
   const iwpcWindow = useIwpcWindow({ debug: true });
@@ -107,6 +122,18 @@ export default function Page() {
             <Plus className='size-4' />
             Increment child remotely
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className='bg-card/60 backdrop-blur'>
+        <CardHeader>
+          <CardTitle>Code</CardTitle>
+          <CardDescription>
+            The whole flow on the parent side. The child mirrors it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CodeBlock code={SNIPPET} filename='parent.tsx' />
         </CardContent>
       </Card>
     </WindowFrame>
