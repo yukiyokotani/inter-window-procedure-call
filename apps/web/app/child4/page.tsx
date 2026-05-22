@@ -5,8 +5,8 @@ import { ReturnValueChildBody } from '@/components/return-value-child';
 export default function Page() {
   return (
     <ReturnValueChildBody
-      transport='broadcastChannel'
-      transportLabel='BroadcastChannel'
+      transport='postMessage'
+      transportLabel='postMessage'
     />
   );
 }

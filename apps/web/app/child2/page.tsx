@@ -1,6 +1,6 @@
 'use client';
 
-import { useIwpcWindow } from '@silurus/iwpc';
+import { useIwpcReady, useIwpcWindow } from '@silurus/iwpc';
 import { Plus, Power, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card';
 import { WindowFrame } from '@/components/window-frame';
 import { PROCEDURES } from '@/lib/procedures';
+import { readinessToStatus } from '@/lib/readiness';
 
 const SNIPPET = `import { useIwpcWindow } from '@silurus/iwpc';
 
@@ -35,6 +36,7 @@ export default function Page() {
     debug: true,
     transport: 'broadcastChannel'
   });
+  const readiness = useIwpcReady(iwpcWindow);
   const [count, setCount] = useState(0);
 
   const incrementCounter = useCallback(() => {
@@ -55,7 +57,7 @@ export default function Page() {
       transport='BroadcastChannel'
       windowId={iwpcWindow?.windowId}
       parentId={iwpcWindow?.parentWindowId}
-      status={iwpcWindow?.parentIwpcWindow ? 'connected' : 'connecting'}
+      status={readinessToStatus(readiness)}
     >
       <Card className='bg-card/60 backdrop-blur'>
         <CardHeader>

@@ -12,35 +12,55 @@ import {
   CardTitle
 } from '@/components/ui/card';
 
-const demos = [
+type Demo = {
+  href: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  badge: 'postMessage' | 'BroadcastChannel';
+  icon: typeof Repeat;
+};
+
+const BADGE_CLASS: Record<Demo['badge'], string> = {
+  postMessage: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
+  BroadcastChannel: 'bg-violet-500/15 text-violet-300 ring-violet-500/30'
+};
+
+const demos: Demo[] = [
   {
     href: './parent1',
     title: 'Counter sync',
-    subtitle: 'postMessage transport',
+    subtitle: 'Fire-and-forget RPC',
     description:
-      'Two windows. Each side increments the other via fire-and-forget RPC over the legacy postMessage handshake.',
+      'Each side increments the other. The simplest pattern: register a handler, invoke it from the other window. No return value.',
     badge: 'postMessage',
-    badgeClass: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
     icon: Repeat
   },
   {
     href: './parent2',
     title: 'Counter sync',
-    subtitle: 'BroadcastChannel transport',
+    subtitle: 'Fire-and-forget RPC',
     description:
-      'Same demo but the parent and child run with noopener — communication goes over a BroadcastChannel after a query-param handshake.',
+      'Same demo. Child opens with noopener and runs on its own event loop — a busy parent never blocks the child or vice versa.',
     badge: 'BroadcastChannel',
-    badgeClass: 'bg-violet-500/15 text-violet-300 ring-violet-500/30',
     icon: Radio
+  },
+  {
+    href: './parent4',
+    title: 'Async return values',
+    subtitle: 'await invoke<…, T>()',
+    description:
+      'Open a child window as a remote dialog and await a typed result — pick a color, confirm, or enter text. Shared event loop with the parent.',
+    badge: 'postMessage',
+    icon: MessagesSquare
   },
   {
     href: './parent3',
     title: 'Async return values',
-    subtitle: 'BroadcastChannel transport',
+    subtitle: 'await invoke<…, T>()',
     description:
-      'Open a child window as a remote dialog. The parent awaits a typed return value — pick a color, confirm an action, or enter free text.',
+      'Same dialog flow, but with thread isolation: the popup runs on its own event loop so its UI stays responsive even when the parent is doing heavy work.',
     badge: 'BroadcastChannel',
-    badgeClass: 'bg-violet-500/15 text-violet-300 ring-violet-500/30',
     icon: MessagesSquare
   }
 ];
@@ -155,19 +175,45 @@ function Demos() {
           Demos
         </span>
         <h2 className='text-2xl font-semibold tracking-tight sm:text-3xl'>
-          Three patterns, opens in a new window
+          Two patterns, two transports
         </h2>
         <p className='max-w-2xl text-sm text-muted-foreground'>
-          Each demo opens a popup. Keep the parent and child side by side
-          to see calls flowing both ways. Open DevTools for verbose logs.
+          Each row is the same demo over two transports. The call shape
+          is identical — the difference is what happens to your event loop.
+          <br />
+          Open the parent and child side by side and watch DevTools for
+          verbose logs.
         </p>
       </div>
-      <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+      <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
         {demos.map((demo) => (
           <DemoCard key={demo.href} {...demo} />
         ))}
       </div>
+      <TransportNote />
     </section>
+  );
+}
+
+function TransportNote() {
+  return (
+    <div className='rounded-lg border border-violet-500/20 bg-violet-500/5 p-5'>
+      <div className='flex flex-col gap-2'>
+        <span className='font-mono text-[11px] uppercase tracking-widest text-violet-300'>
+          Why BroadcastChannel?
+        </span>
+        <p className='text-sm leading-relaxed text-foreground/90'>
+          The BroadcastChannel transport opens the child with{' '}
+          <code className='font-mono text-foreground'>noopener</code>, so the
+          two windows live on{' '}
+          <strong className='font-semibold'>independent event loops</strong>.
+          Heavy work in one window — a long parse, a layout thrash, a CPU
+          spike — does not stall the other. The API surface is identical
+          to the postMessage transport; reach for it when the popup needs
+          to stay responsive regardless of what the parent is doing.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -177,9 +223,8 @@ function DemoCard({
   subtitle,
   description,
   badge,
-  badgeClass,
   icon: Icon
-}: (typeof demos)[number]) {
+}: Demo) {
   return (
     <Card className='group flex flex-col overflow-hidden bg-card/40 backdrop-blur transition-colors hover:bg-card/70'>
       <CardHeader className='gap-3'>
@@ -190,7 +235,7 @@ function DemoCard({
           <span
             className={
               'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ' +
-              badgeClass
+              BADGE_CLASS[badge]
             }
           >
             {badge}

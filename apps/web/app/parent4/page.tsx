@@ -3,10 +3,10 @@
 import { ReturnValueParentBody } from '@/components/return-value-parent';
 
 const PARENT_SNIPPET = `// Parent: open the popup and await a typed value.
-// The BroadcastChannel transport opens the child with \`noopener\`, so the
-// child runs on its OWN event loop — a busy parent does not freeze the
-// dialog and vice versa.
-const child = await iwpc.open(\`./child3?kind=color\`, {
+// The postMessage transport keeps \`window.opener\` wired up, so the
+// parent and child share an agent cluster and an event loop. Same shape
+// as the BroadcastChannel demo — only the option differs.
+const child = await iwpc.open(\`./child4?kind=color\`, {
   width: 520,
   height: 540
 });
@@ -24,6 +24,7 @@ if (hex === null) {
 }`;
 
 const CHILD_SNIPPET = `// Child: turn a user interaction into a procedure return value.
+// Identical to the BroadcastChannel child — the call shape is the same.
 const resolverRef = useRef<((v: string | null) => void) | null>(null);
 
 useEffect(() => {
@@ -38,26 +39,26 @@ useEffect(() => {
 const onPick = (hex: string) => {
   resolverRef.current?.(hex);
   resolverRef.current = null;
-  // Let the RETURN message flush over BroadcastChannel, then tear down.
   setTimeout(() => iwpc?.close(), 120);
 };`;
 
 export default function Page() {
   return (
     <ReturnValueParentBody
-      transport='broadcastChannel'
-      transportLabel='BroadcastChannel'
-      childRoute='./child3'
+      transport='postMessage'
+      transportLabel='postMessage'
+      childRoute='./child4'
       parentSnippet={PARENT_SNIPPET}
       childSnippet={CHILD_SNIPPET}
       intro={
         <>
-          Same return-value pattern as the postMessage demo, but the popup
-          opens with <code className='font-mono'>noopener</code> — it runs on
-          its <strong className='font-semibold text-foreground'>own event loop</strong>,
-          so a long-running task in the parent never freezes the dialog. The
-          real advantage of this transport is this thread isolation, not the
-          call shape itself.
+          The return-value pattern over the legacy{' '}
+          <code className='font-mono'>postMessage</code> transport. The call
+          shape is identical to the BroadcastChannel demo — what differs is
+          that <strong className='font-semibold text-foreground'>the child shares
+          the parent&apos;s event loop</strong>. Pick this transport when you
+          want the simplest setup and the windows are short-lived; pick
+          BroadcastChannel when the child runs alongside a busy parent.
         </>
       }
     />

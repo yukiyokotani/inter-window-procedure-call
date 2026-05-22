@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Copy } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -12,13 +12,45 @@ type CodeBlockProps = {
   className?: string;
 };
 
+function inferLang(filename: string | undefined, fallback: string): string {
+  if (!filename) return fallback;
+  const ext = filename.split('.').pop();
+  if (!ext) return fallback;
+  if (ext === 'ts') return 'ts';
+  if (ext === 'tsx') return 'tsx';
+  if (ext === 'js') return 'js';
+  if (ext === 'jsx') return 'jsx';
+  return fallback;
+}
+
 export function CodeBlock({
   code,
-  language = 'ts',
+  language,
   filename,
   className
 }: CodeBlockProps) {
+  const lang = language ?? inferLang(filename, 'tsx');
+  const [html, setHtml] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { codeToHtml } = await import('shiki');
+        const result = await codeToHtml(code, {
+          lang,
+          theme: 'github-dark-default'
+        });
+        if (!cancelled) setHtml(result);
+      } catch {
+        /* leave the plain fallback in place */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [code, lang]);
 
   const copy = async () => {
     try {
@@ -39,7 +71,7 @@ export function CodeBlock({
     >
       <div className='flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5'>
         <span className='text-[10px] uppercase tracking-widest text-muted-foreground'>
-          {filename ?? language}
+          {filename ?? lang}
         </span>
         <button
           type='button'
@@ -59,9 +91,17 @@ export function CodeBlock({
           )}
         </button>
       </div>
-      <pre className='overflow-x-auto p-4 text-foreground/90'>
-        <code>{code}</code>
-      </pre>
+      {html ? (
+        <div
+          className='code-shiki overflow-x-auto p-4'
+          // shiki output is sanitized to a known shape; rendering as HTML is safe.
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <pre className='overflow-x-auto p-4 text-foreground/90'>
+          <code>{code}</code>
+        </pre>
+      )}
     </figure>
   );
 }

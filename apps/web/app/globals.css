@@ -55,6 +55,18 @@
   }
 }
 
+@layer components {
+  /* Strip shiki's own background so the code block inherits the card's. */
+  .code-shiki pre {
+    background-color: transparent !important;
+    margin: 0;
+    padding: 0;
+  }
+  .code-shiki code {
+    font-family: inherit;
+  }
+}
+
 @layer utilities {
   .bg-grid {
     background-image:
