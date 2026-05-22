@@ -1,63 +1,123 @@
 'use client';
+
 import { IwpcWindowAgent, useIwpcWindow } from '@silurus/iwpc/index';
+import { ExternalLink, Minus, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const INCREMENT_COUNTER = 'INCREMENT_COUNTER';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import { WindowFrame } from '@/components/window-frame';
+import { PROCEDURES } from '@/lib/procedures';
 
-export default function Page(): JSX.Element {
+export default function Page() {
   const iwpcWindow = useIwpcWindow({
     debug: true,
     transport: 'broadcastChannel'
   });
   const [count, setCount] = useState(0);
-
-  const iwpcChildWindowRef = useRef<IwpcWindowAgent>();
+  const [child, setChild] = useState<IwpcWindowAgent | null>(null);
+  const childRef = useRef<IwpcWindowAgent | null>(null);
 
   const incrementCounter = useCallback(() => {
-    setCount((count) => count + 1);
+    setCount((c) => c + 1);
   }, []);
 
   useEffect(() => {
-    iwpcWindow?.register(INCREMENT_COUNTER, incrementCounter);
+    iwpcWindow?.register(PROCEDURES.INCREMENT_COUNTER, incrementCounter);
     return () => {
-      iwpcWindow?.unregister(INCREMENT_COUNTER);
+      iwpcWindow?.unregister(PROCEDURES.INCREMENT_COUNTER);
     };
   }, [iwpcWindow, incrementCounter]);
 
+  const openChild = useCallback(async () => {
+    try {
+      const agent = await iwpcWindow?.open('./child2', {
+        width: 520,
+        height: 540,
+        top: 80,
+        left: 720
+      });
+      if (agent) {
+        childRef.current = agent;
+        setChild(agent);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [iwpcWindow]);
+
+  const invokeChild = useCallback(() => {
+    childRef.current?.invoke(PROCEDURES.INCREMENT_COUNTER, undefined);
+  }, []);
+
   return (
-    <div>
-      <h1 className='text-xl'>Parent 2 (BroadcastChannel)</h1>
-      <p>
-        WindowId: <code>{iwpcWindow?.windowId ?? '...'}</code>
-      </p>
-      <div>Count {count}</div>
-      <div>
-        <button
-          type='button'
-          onClick={async () => {
-            try {
-              iwpcChildWindowRef.current = await iwpcWindow?.open('./child2', {
-                width: 600,
-                height: 200,
-                top: 0,
-                left: 800
-              });
-            } catch (e) {
-              console.error(e);
-            }
-          }}
-        >
-          open child 2
-        </button>
-        <button
-          type='button'
-          onClick={() => {
-            iwpcChildWindowRef.current?.invoke(INCREMENT_COUNTER, undefined);
-          }}
-        >
-          invoke child 2 counter increment
-        </button>
-      </div>
-    </div>
+    <WindowFrame
+      title='Counter — Parent'
+      role='Parent'
+      transport='BroadcastChannel'
+      windowId={iwpcWindow?.windowId}
+      status={iwpcWindow ? 'connected' : 'connecting'}
+    >
+      <Card className='bg-card/60 backdrop-blur'>
+        <CardHeader>
+          <CardTitle>Shared counter</CardTitle>
+          <CardDescription>
+            Same counter demo as Parent 1, but with the BroadcastChannel
+            transport. The child opens with <code className='font-mono'>noopener</code> —
+            there is no DOM reference between the two windows.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='flex flex-col gap-6'>
+          <div className='flex items-center justify-between rounded-lg border border-border bg-background/50 p-6'>
+            <span className='font-mono text-xs uppercase tracking-widest text-muted-foreground'>
+              Count
+            </span>
+            <span className='font-mono text-5xl font-semibold tabular-nums'>
+              {count}
+            </span>
+          </div>
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button
+              variant='secondary'
+              onClick={() => setCount((c) => Math.max(0, c - 1))}
+            >
+              <Minus className='size-4' />
+              Local −
+            </Button>
+            <Button onClick={() => setCount((c) => c + 1)}>
+              <Plus className='size-4' />
+              Local +
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className='bg-card/60 backdrop-blur'>
+        <CardHeader>
+          <CardTitle>Child window</CardTitle>
+          <CardDescription>
+            Pairing happens via a query-param handshake — the child
+            broadcasts <code className='font-mono'>NOTIFY_WINDOW_ID</code> and the
+            parent replies. Reload the child: it re-pairs automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className='flex flex-wrap items-center gap-2'>
+          <Button onClick={openChild} disabled={!iwpcWindow}>
+            <ExternalLink className='size-4' />
+            Open child
+          </Button>
+          <Button variant='outline' onClick={invokeChild} disabled={!child}>
+            <Plus className='size-4' />
+            Increment child remotely
+          </Button>
+        </CardContent>
+      </Card>
+    </WindowFrame>
   );
 }
