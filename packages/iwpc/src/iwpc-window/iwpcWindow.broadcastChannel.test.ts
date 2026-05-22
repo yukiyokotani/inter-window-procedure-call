@@ -2,10 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeWindow, flush } from '../test-helpers/fakeWindow';
 
-import {
-  IWPC_PARENT_ID_QUERY_PARAM,
-  IWPC_WINDOW_ID_QUERY_PARAM
-} from './constants';
+import { IWPC_WINDOW_ID_QUERY_PARAM } from './constants';
 import { IwpcWindow } from './iwpcWindow';
 
 const live: IwpcWindow[] = [];
@@ -39,54 +36,18 @@ describe('IwpcWindow (broadcastChannel transport)', () => {
     expect(iwpc.parentIwpcWindow).toBeUndefined();
   });
 
-  it('reads its own id and parent id from URL query parameters', async () => {
+  it('reads its own id from URL query parameters', () => {
     const child = new FakeWindow();
-    child.setSearch(
-      `${IWPC_WINDOW_ID_QUERY_PARAM}=child-id-123&${IWPC_PARENT_ID_QUERY_PARAM}=parent-id-999`
-    );
+    child.setSearch(`${IWPC_WINDOW_ID_QUERY_PARAM}=child-id-123`);
     const iwpc = trackedIwpc(child);
     iwpc.initialize();
-    await expect(iwpc.ready).resolves.toBe(true);
     expect(iwpc.windowId).toBe('child-id-123');
-    expect(iwpc.parentWindowId).toBe('parent-id-999');
-    expect(iwpc.parentIwpcWindow?.windowId).toBe('parent-id-999');
+    // No parent has acked yet, so parent fields stay undefined.
+    expect(iwpc.parentWindowId).toBeUndefined();
+    expect(iwpc.parentIwpcWindow).toBeUndefined();
   });
 
-  it('open() generates the child id, appends both query params to the URL, and opens with noopener', async () => {
-    const parent = new FakeWindow();
-    const parentIwpc = trackedIwpc(parent);
-    parentIwpc.initialize();
-    await parentIwpc.ready;
-
-    const captured: Array<{
-      url?: string;
-      target?: string;
-      features?: string;
-    }> = [];
-    parent.open = vi.fn((url, target, features) => {
-      captured.push({ url, target, features });
-      return null; // noopener semantics
-    });
-
-    const openPromise = parentIwpc.open('/child');
-    // Catch so the eventual timeout rejection is not unhandled while we await
-    // microtasks for the open() call to populate captured.
-    openPromise.catch(() => undefined);
-    await flush();
-
-    expect(captured).toHaveLength(1);
-    const call = captured[0]!;
-    expect(call.features).toContain('noopener');
-    expect(call.url).toBeDefined();
-    const url = call.url as string;
-    expect(url).toContain(IWPC_WINDOW_ID_QUERY_PARAM);
-    expect(url).toContain(IWPC_PARENT_ID_QUERY_PARAM);
-    const params = new URLSearchParams(url.split('?')[1]);
-    expect(params.get(IWPC_PARENT_ID_QUERY_PARAM)).toBe(parentIwpc.windowId);
-    expect(typeof params.get(IWPC_WINDOW_ID_QUERY_PARAM)).toBe('string');
-  });
-
-  it('parent.open() resolves when the child broadcasts READY', async () => {
+  it("learns its parent's id from the RECEIVED ack, not from the URL", async () => {
     const parent = new FakeWindow();
     const parentIwpc = trackedIwpc(parent);
     parentIwpc.initialize();
@@ -101,7 +62,67 @@ describe('IwpcWindow (broadcastChannel transport)', () => {
     const openPromise = parentIwpc.open('/child');
     await flush();
 
-    // Spin up the child IwpcWindow with the search the parent put in the URL.
+    const params = new URLSearchParams(capturedUrl.split('?')[1]);
+    // Child id is in the URL, parent id is NOT.
+    expect(typeof params.get(IWPC_WINDOW_ID_QUERY_PARAM)).toBe('string');
+    expect(params.has('__iwpcParentId')).toBe(false);
+
+    const child = new FakeWindow();
+    child.setSearch(capturedUrl.slice(capturedUrl.indexOf('?')));
+    const childIwpc = trackedIwpc(child);
+    childIwpc.initialize();
+
+    await openPromise;
+    await childIwpc.ready;
+    expect(childIwpc.parentWindowId).toBe(parentIwpc.windowId);
+    expect(childIwpc.parentIwpcWindow?.windowId).toBe(parentIwpc.windowId);
+  });
+
+  it('open() appends only the child id query param to the URL and opens with noopener', async () => {
+    const parent = new FakeWindow();
+    const parentIwpc = trackedIwpc(parent);
+    parentIwpc.initialize();
+    await parentIwpc.ready;
+
+    const captured: Array<{
+      url?: string;
+      target?: string;
+      features?: string;
+    }> = [];
+    parent.open = vi.fn((url, target, features) => {
+      captured.push({ url, target, features });
+      return null;
+    });
+
+    const openPromise = parentIwpc.open('/child');
+    openPromise.catch(() => undefined);
+    await flush();
+
+    expect(captured).toHaveLength(1);
+    const call = captured[0]!;
+    expect(call.features).toContain('noopener');
+    const url = call.url as string;
+    expect(url).toContain(IWPC_WINDOW_ID_QUERY_PARAM);
+    expect(url).not.toContain('__iwpcParentId');
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(typeof params.get(IWPC_WINDOW_ID_QUERY_PARAM)).toBe('string');
+  });
+
+  it('parent.open() resolves when the child broadcasts NOTIFY_WINDOW_ID', async () => {
+    const parent = new FakeWindow();
+    const parentIwpc = trackedIwpc(parent);
+    parentIwpc.initialize();
+    await parentIwpc.ready;
+
+    let capturedUrl = '';
+    parent.open = vi.fn((url) => {
+      capturedUrl = url ?? '';
+      return null;
+    });
+
+    const openPromise = parentIwpc.open('/child');
+    await flush();
+
     const child = new FakeWindow();
     child.setSearch(capturedUrl.slice(capturedUrl.indexOf('?')));
     const childIwpc = trackedIwpc(child);
@@ -165,6 +186,7 @@ describe('IwpcWindow (broadcastChannel transport)', () => {
 
     parentIwpc.register('DOUBLE', (n) => (n as number) * 2);
     await openPromise;
+    await childIwpc.ready;
 
     const result = await childIwpc.parentIwpcWindow?.invoke<number, number>(
       'DOUBLE',
@@ -174,14 +196,14 @@ describe('IwpcWindow (broadcastChannel transport)', () => {
     expect(result).toBe(42);
   });
 
-  it('rejects open() when the child never broadcasts READY', async () => {
+  it('rejects open() when the child never broadcasts NOTIFY_WINDOW_ID', async () => {
     const parent = new FakeWindow();
     const parentIwpc = trackedIwpc(parent);
     parentIwpc.initialize();
     await parentIwpc.ready;
     parent.open = vi.fn(() => null);
 
-    await expect(parentIwpc.open('/child')).rejects.toThrow(/READY/);
+    await expect(parentIwpc.open('/child')).rejects.toThrow(/NOTIFY/);
   }, 10000);
 
   it('produces a relative URL when the parent is on the same origin', async () => {
@@ -272,9 +294,7 @@ describe('IwpcWindow (broadcastChannel transport) - cross-mode isolation', () =>
     await parentIwpc.ready;
 
     const child = new FakeWindow();
-    child.setSearch(
-      `${IWPC_WINDOW_ID_QUERY_PARAM}=child-id&${IWPC_PARENT_ID_QUERY_PARAM}=${parentIwpc.windowId}`
-    );
+    child.setSearch(`${IWPC_WINDOW_ID_QUERY_PARAM}=child-id`);
     const childIwpc = trackedIwpc(child);
     childIwpc.initialize();
     await flush();

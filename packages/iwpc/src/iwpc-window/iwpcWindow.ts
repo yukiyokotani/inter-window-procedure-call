@@ -5,7 +5,6 @@ import { Topic } from '../topic/topic';
 
 import {
   INITIALIZATION_TIMEOUT,
-  IWPC_PARENT_ID_QUERY_PARAM,
   IWPC_WINDOW_ID_QUERY_PARAM
 } from './constants';
 import {
@@ -17,7 +16,6 @@ import { IwpcWindowAgent } from './iwpcWindowAgent';
 import { Logger } from './logger';
 import {
   IwpcMessage,
-  IwpcReadyMessage,
   IwpcReturnMessage,
   NotifyWindowIdMessage,
   ReceivedWindowIdMessage
@@ -33,9 +31,11 @@ export type IwpcOptions = {
   /**
    * Transport used to bootstrap the window-id handshake.
    * - `postMessage` (default): requires `window.opener`; original behavior.
-   * - `broadcastChannel`: the parent injects ids into the child URL via query
-   *   parameters, so no opener/referrer is needed and the windows run on
-   *   independent event loops.
+   * - `broadcastChannel`: the parent injects only the child's id into the
+   *   child URL via a query parameter, then the child broadcasts a
+   *   `NOTIFY_WINDOW_ID` and the parent replies with `RECEIVED_WINDOW_ID`
+   *   carrying its own id. No opener/referrer is needed and the windows
+   *   run on independent event loops.
    *
    * Procedure invocation itself always uses BroadcastChannel.
    */
@@ -97,7 +97,7 @@ export class IwpcWindow extends Logger {
   // Subscription
   private _iwpcTopic: Topic<string, IwpcMessage>;
   private _invokeSubscription: Subscription | undefined;
-  private _readySubscription: Subscription | undefined;
+  private _handshakeSubscription: Subscription | undefined;
 
   // Iwpc
   private _iwpcRegisteredProcessMap: Map<string, (args: unknown) => unknown>;
@@ -146,11 +146,7 @@ export class IwpcWindow extends Logger {
     );
 
     if (this._transport === 'broadcastChannel') {
-      const queryIds = this._readQueryParamIds();
-      this._windowId = queryIds.ownId ?? nanoid();
-      if (queryIds.parentId) {
-        this._parentWindowId = queryIds.parentId;
-      }
+      this._windowId = this._readOwnIdFromQuery() ?? nanoid();
     } else {
       this._windowId = nanoid();
     }
@@ -200,13 +196,13 @@ export class IwpcWindow extends Logger {
     this._invokeSubscription = this._iwpcTopic.subscribe(
       this._invokeMessageSubscriber.bind(this)
     );
-    this._readySubscription = this._iwpcTopic.subscribe(
-      this._readyMessageSubscriber.bind(this)
-    );
 
     if (this._transport === 'postMessage') {
       this._initializePostMessage();
     } else {
+      this._handshakeSubscription = this._iwpcTopic.subscribe(
+        this._broadcastHandshakeSubscriber.bind(this)
+      );
       this._initializeBroadcastChannel();
     }
   }
@@ -262,7 +258,7 @@ export class IwpcWindow extends Logger {
     this._rejectReady(new IwpcDisposedError('IwpcWindow disposed.'));
 
     this._invokeSubscription?.unsubscribe();
-    this._readySubscription?.unsubscribe();
+    this._handshakeSubscription?.unsubscribe();
     this._parentIwpcWindow?.dispose();
 
     for (const [, entry] of this._pendingChildren) {
@@ -444,27 +440,32 @@ export class IwpcWindow extends Logger {
   // ---------- broadcastChannel transport ----------
 
   private _initializeBroadcastChannel() {
-    if (this._parentWindowId !== undefined) {
-      // Parent id was passed via query parameter; build the agent immediately
-      // and broadcast a READY message so the parent can resolve its open()
-      // promise.
-      this._parentIwpcWindow = new IwpcWindowAgent(
-        null,
-        this._parentWindowId,
-        this._windowId,
-        this._iwpcTopic,
-        { debug: this._options?.debug }
-      );
-      const ready: IwpcReadyMessage = {
-        type: 'READY',
-        senderWindowId: this._windowId
-      };
-      this._iwpcTopic.publish(ready);
-      this._log('📣 Broadcasted READY message.');
-    } else {
-      this._debug('⚙️ No parent id in query params; running as root window.');
+    const ownIdInQuery = this._readOwnIdFromQuery();
+    if (ownIdInQuery === undefined) {
+      this._debug('⚙️ No own id in query params; running as root window.');
+      this._resolveReady(true);
+      return;
     }
-    this._resolveReady(true);
+
+    // Child: announce ourselves and wait for the parent's ack.
+    this._readyTimer = setTimeout(() => {
+      this._readyTimer = undefined;
+      this._error(
+        '🆔⏱ Timed out waiting for parent RECEIVED_WINDOW_ID ack.'
+      );
+      this._rejectReady(
+        new IwpcHandshakeError(
+          'IwpcWindow handshake with parent timed out.'
+        )
+      );
+    }, INITIALIZATION_TIMEOUT);
+
+    const notify: NotifyWindowIdMessage = {
+      type: 'NOTIFY_WINDOW_ID',
+      myWindowId: this._windowId
+    };
+    this._iwpcTopic.publish(notify);
+    this._log('🆔📣 Broadcasted NOTIFY_WINDOW_ID.', this._windowId);
   }
 
   private _openBroadcastChannel(
@@ -494,7 +495,7 @@ export class IwpcWindow extends Logger {
           this._pendingChildren.delete(childWindowId);
           reject(
             new IwpcHandshakeError(
-              `Timed out waiting for child window ${childWindowId} to broadcast READY.`
+              `Timed out waiting for child window ${childWindowId} to broadcast NOTIFY_WINDOW_ID.`
             )
           );
         }
@@ -504,22 +505,53 @@ export class IwpcWindow extends Logger {
     });
   }
 
-  private _readyMessageSubscriber(message: IwpcMessage) {
-    if (message.type !== 'READY') return;
-    const childWindowId = message.senderWindowId;
-    const pending = this._pendingChildren.get(childWindowId);
-    if (!pending) return;
-    this._pendingChildren.delete(childWindowId);
-    clearTimeout(pending.timer);
-    const agent = new IwpcWindowAgent(
-      null,
-      childWindowId,
-      this._windowId,
-      this._iwpcTopic,
-      { debug: this._options?.debug }
-    );
-    pending.resolve(agent);
-    this._log('🆔📬 Child window READY received.', childWindowId);
+  private _broadcastHandshakeSubscriber(message: IwpcMessage) {
+    if (message.type === 'NOTIFY_WINDOW_ID') {
+      const childWindowId = message.myWindowId;
+      if (childWindowId === this._windowId) return;
+      const pending = this._pendingChildren.get(childWindowId);
+      if (!pending) return;
+
+      const ack: ReceivedWindowIdMessage = {
+        type: 'RECEIVED_WINDOW_ID',
+        yourWindowId: childWindowId,
+        myWindowId: this._windowId
+      };
+      this._iwpcTopic.publish(ack);
+
+      this._pendingChildren.delete(childWindowId);
+      clearTimeout(pending.timer);
+      const agent = new IwpcWindowAgent(
+        null,
+        childWindowId,
+        this._windowId,
+        this._iwpcTopic,
+        { debug: this._options?.debug }
+      );
+      pending.resolve(agent);
+      this._log('🆔📬 NOTIFY received; acked child.', childWindowId);
+      return;
+    }
+
+    if (message.type === 'RECEIVED_WINDOW_ID') {
+      if (message.yourWindowId !== this._windowId) return;
+      if (this._parentWindowId !== undefined) return;
+
+      this._parentWindowId = message.myWindowId;
+      this._parentIwpcWindow = new IwpcWindowAgent(
+        null,
+        this._parentWindowId,
+        this._windowId,
+        this._iwpcTopic,
+        { debug: this._options?.debug }
+      );
+      if (this._readyTimer !== undefined) {
+        clearTimeout(this._readyTimer);
+        this._readyTimer = undefined;
+      }
+      this._resolveReady(true);
+      this._log("👾 The parent window's agent is now ready.");
+    }
   }
 
   // ---------- shared helpers ----------
@@ -527,25 +559,18 @@ export class IwpcWindow extends Logger {
   private _appendIwpcQueryParams(path: string, childWindowId: string): string {
     const baseUrl = new URL(path, this._window.location.href);
     baseUrl.searchParams.set(IWPC_WINDOW_ID_QUERY_PARAM, childWindowId);
-    baseUrl.searchParams.set(IWPC_PARENT_ID_QUERY_PARAM, this._windowId);
     if (baseUrl.origin === this._expectedOrigin) {
       return `${baseUrl.pathname}${baseUrl.search}${baseUrl.hash}`;
     }
     return baseUrl.toString();
   }
 
-  private _readQueryParamIds(): {
-    ownId: string | undefined;
-    parentId: string | undefined;
-  } {
+  private _readOwnIdFromQuery(): string | undefined {
     try {
       const params = new URLSearchParams(this._window.location.search);
-      return {
-        ownId: params.get(IWPC_WINDOW_ID_QUERY_PARAM) ?? undefined,
-        parentId: params.get(IWPC_PARENT_ID_QUERY_PARAM) ?? undefined
-      };
+      return params.get(IWPC_WINDOW_ID_QUERY_PARAM) ?? undefined;
     } catch {
-      return { ownId: undefined, parentId: undefined };
+      return undefined;
     }
   }
 
