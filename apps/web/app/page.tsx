@@ -28,7 +28,7 @@ const BADGE_CLASS: Record<Demo['badge'], string> = {
 
 const demos: Demo[] = [
   {
-    href: './parent1',
+    href: './counter/postmessage',
     title: 'Counter sync',
     subtitle: 'Fire-and-forget RPC',
     description:
@@ -37,7 +37,7 @@ const demos: Demo[] = [
     icon: Repeat
   },
   {
-    href: './parent2',
+    href: './counter/broadcast',
     title: 'Counter sync',
     subtitle: 'Fire-and-forget RPC',
     description:
@@ -46,7 +46,7 @@ const demos: Demo[] = [
     icon: Radio
   },
   {
-    href: './parent4',
+    href: './dialog/postmessage',
     title: 'Async return values',
     subtitle: 'await invoke<…, T>()',
     description:
@@ -55,7 +55,7 @@ const demos: Demo[] = [
     icon: MessagesSquare
   },
   {
-    href: './parent3',
+    href: './dialog/broadcast',
     title: 'Async return values',
     subtitle: 'await invoke<…, T>()',
     description:
