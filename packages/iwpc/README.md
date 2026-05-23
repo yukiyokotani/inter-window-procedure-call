@@ -208,7 +208,7 @@ sequenceDiagram
     BC->>Child: RECEIVED_WINDOW_ID
 
     Note over Parent: open() resolves<br/>with the child agent
-    Note over Child: iwpc.ready resolves;<br/>parentIwpcWindow populated
+    Note over Child: iwpc.ready resolves —<br/>parentIwpcWindow populated
 
     Parent->>BC: INVOKE { targetWindowId, processId, iwpcTaskId, args }
     BC->>Child: INVOKE
