@@ -162,6 +162,86 @@ export default function ChildPage() {
 
 ---
 
+## Lifecycle
+
+An `IwpcWindow` moves through four stages:
+
+```
+new IwpcWindow(window, opts)
+  ↓
+register(...) procedures the peer may call
+  ↓
+initialize()      ← starts the window-id handshake
+  ↓
+await iwpc.ready  ← resolves when the handshake completes
+                    (rejects on timeout, disposal, etc.)
+```
+
+The handshake is what makes a window reachable from outside. Until you call `initialize()`, the window is invisible to its peers. After it resolves, the procedure map is consulted on every incoming `INVOKE` / `BROADCAST`.
+
+### Register before initialize
+
+The peer fires `invoke()` the instant its `open()` resolves. If you register the handler **after** `initialize()` — say, in a later `useEffect` — the peer's INVOKE can land in a window with an empty procedure map and reject with `IwpcProcedureNotFoundError`.
+
+```ts
+// ✗ race-prone — the handshake may complete before register() runs
+const w = new IwpcWindow(window);
+w.initialize();
+// ...later, in some hook or callback:
+w.register('PICK_COLOR', handler);
+
+// ✓ safe — handler is in the map before the handshake completes
+const w = new IwpcWindow(window);
+w.register('PICK_COLOR', handler);
+w.initialize();
+```
+
+This only matters for procedures the peer can hit *immediately* after `open()` resolves (the typical "open a popup as a dialog and await its return" pattern). For user-driven calls — e.g. a button on the parent that invokes the child later — registering after `initialize()` is fine.
+
+`initialize()` is idempotent; calling it twice is a no-op.
+
+### React: `useIwpcWindow` collapses construct + initialize
+
+The `useIwpcWindow` hook constructs the instance and calls `initialize()` for you in a single effect. That trades pre-init registration for ergonomics. If you need procedures registered before the handshake (popup whose parent invokes immediately), drop down to the imperative API:
+
+```tsx
+function ChildPage() {
+  const [iwpc, setIwpc] = useState<IwpcWindow>();
+  useEffect(() => {
+    const w = new IwpcWindow(window, { transport: 'broadcastChannel' });
+    w.register('PICK_COLOR', () => new Promise<string | null>((resolve) => {
+      // resolve from a user interaction below
+    }));
+    w.initialize();           // ← AFTER register
+    setIwpc(w);
+    return () => w.dispose();
+  }, []);
+  // ...
+}
+```
+
+### Waiting for ready in React
+
+`iwpc.ready` is a `Promise<boolean>`. The bundled `useIwpcReady` hook turns it into React state so components can react to handshake completion:
+
+```tsx
+import { useIwpcReady, useIwpcWindow } from '@silurus/iwpc';
+
+const iwpc = useIwpcWindow();
+const status = useIwpcReady(iwpc); // 'pending' | 'ready' | 'failed'
+```
+
+This is the right way to gate UI on "the peer is connected" — React does not observe imperative mutations on the `IwpcWindow` instance, so reading `iwpc.parentIwpcWindow` directly from render does not re-render when the handshake completes.
+
+### Teardown
+
+- `dispose()` — tears down subscriptions, rejects pending invocations, leaves the window open. Idempotent.
+- `close()` — calls `dispose()` and then `window.close()`.
+
+The `useIwpcWindow` hook calls `dispose()` automatically on unmount.
+
+---
+
 ## Typing your procedures
 
 `register` and `invoke` both accept type parameters that describe the call's
