@@ -31,6 +31,7 @@ IWPC fills that gap. Use it when:
   - `broadcastChannel`: opener-less, child can be opened with `noopener`. Resilient to child reload — the parent re-acks automatically.
 - **Procedure invocation always over `BroadcastChannel`**, so request/response routing is uniform regardless of transport.
 - **Typed `register` / `invoke`** — share a procedure table type across windows.
+- **`broadcast()`** — fire a procedure call at every other window on the same `channelName` (fire-and-forget, no return).
 - **First-class error model**: `IwpcTimeoutError`, `IwpcAbortError`, `IwpcProcedureNotFoundError`, `IwpcRemoteError`, `IwpcDisposedError`, `IwpcHandshakeError`.
 - **AbortSignal**-aware invocations.
 - **Per-app `channelName`** to avoid cross-app collisions on the same origin.
@@ -205,6 +206,32 @@ The library does not enforce a particular shape for your table — feel free to
 mix `Record`-of-procedures, discriminated unions, or per-procedure type aliases.
 Whatever you do, applying the same types on both sides is enough to catch
 mismatches at compile time.
+
+---
+
+## Broadcasting to all windows
+
+`invoke()` targets a single window by id. For "tell every other window
+that something happened", use `broadcast()`:
+
+```ts
+// Sender (any window — root, parent, or child)
+iwpc.broadcast<{ reason: string }>('CONFIG_CHANGED', { reason: 'pricing-flag' });
+
+// Every other window on the same channelName + origin runs its handler
+iwpc.register<{ reason: string }>('CONFIG_CHANGED', ({ reason }) => {
+  refetchConfig(reason);
+});
+```
+
+Semantics:
+
+- **Fan-out, fire-and-forget.** No return value, no timeout, no `AbortSignal`. Errors thrown by recipients are logged on the recipient side and otherwise swallowed.
+- **Sender is excluded.** The sender does not receive its own broadcast, even if it has the same procedure registered locally. Call the handler directly if you also want it to fire on this side.
+- **Channel-scoped.** `channelName` isolation applies — broadcasts on one channel are invisible to windows on another.
+- **Recipients without the procedure are silent.** If no window has `processId` registered, the broadcast is a no-op (no error).
+
+Reach for `invoke()` when you need a reply from one specific window. Reach for `broadcast()` when you want every window listening for an event to react.
 
 ---
 

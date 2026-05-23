@@ -15,6 +15,7 @@ import {
 import { IwpcWindowAgent } from './iwpcWindowAgent';
 import { Logger } from './logger';
 import {
+  IwpcBroadcastMessage,
   IwpcMessage,
   IwpcReturnMessage,
   NotifyWindowIdMessage,
@@ -237,6 +238,35 @@ export class IwpcWindow extends Logger {
 
   public unregister(processId: string) {
     this._iwpcRegisteredProcessMap.delete(processId);
+  }
+
+  /**
+   * Broadcast a procedure call to every other window on the same
+   * `channelName` and origin. Fire-and-forget — no return value, no
+   * timeout, no `AbortSignal`. Every recipient that has `processId`
+   * registered will execute its handler; recipients that do not are
+   * silent.
+   *
+   * The sender's own window does NOT receive its own broadcast, even if
+   * the same procedure is registered locally. Call the handler directly
+   * if you also want it to fire on this side.
+   *
+   * Errors thrown by recipients are logged on the recipient side (in
+   * debug mode) and otherwise swallowed — they cannot propagate back
+   * because there is no requester to inform.
+   */
+  public broadcast<Args = void>(processId: string, args?: Args): void {
+    if (this._disposed) {
+      throw new IwpcDisposedError('IwpcWindow has been disposed.');
+    }
+    const message: IwpcBroadcastMessage = {
+      type: 'BROADCAST',
+      processId,
+      senderWindowId: this._windowId,
+      args
+    };
+    this._iwpcTopic.publish(message);
+    this._log('📣 Broadcasted procedure call.', message);
   }
 
   public async open(
@@ -611,6 +641,10 @@ export class IwpcWindow extends Logger {
   }
 
   private _invokeMessageSubscriber(message: IwpcMessage) {
+    if (message.type === 'BROADCAST') {
+      this._broadcastMessageSubscriber(message);
+      return;
+    }
     if (message.type !== 'INVOKE') return;
     if (message.targetWindowId !== this._windowId) return;
 
@@ -666,6 +700,31 @@ export class IwpcWindow extends Logger {
         '↩ Sent a message of the result of the procedure call.',
         iwpcReturnMessage
       );
+    })();
+  }
+
+  private _broadcastMessageSubscriber(message: IwpcBroadcastMessage) {
+    // Sender does not deliver to itself; callers can call the handler
+    // locally if they want both sides to fire.
+    if (message.senderWindowId === this._windowId) return;
+
+    const procedure = this._iwpcRegisteredProcessMap.get(message.processId);
+    if (procedure === undefined) {
+      this._debug(
+        '📣 Broadcast received but no procedure is registered locally.',
+        `processId: ${message.processId}`,
+        `from: ${message.senderWindowId}`
+      );
+      return;
+    }
+
+    void (async () => {
+      try {
+        await procedure(message.args);
+      } catch (e) {
+        // There is no requester to inform — log and move on.
+        this._error('📣 Broadcast handler threw.', e);
+      }
     })();
   }
 }

@@ -1,0 +1,20 @@
+'use client';
+
+import { FanoutChildBody } from '@/components/fanout-child';
+
+const SNIPPET = `const iwpc = useIwpcWindow({ transport: 'broadcastChannel' });
+
+useEffect(() => {
+  iwpc?.register('INCREMENT_COUNTER', () => setCount((c) => c + 1));
+  return () => iwpc?.unregister('INCREMENT_COUNTER');
+}, [iwpc]);`;
+
+export default function Page() {
+  return (
+    <FanoutChildBody
+      transport='broadcastChannel'
+      transportLabel='BroadcastChannel'
+      snippet={SNIPPET}
+    />
+  );
+}
