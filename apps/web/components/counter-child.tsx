@@ -1,6 +1,10 @@
 'use client';
 
-import { useIwpcReady, useIwpcWindow } from '@silurus/iwpc';
+import {
+  type IwpcOptions,
+  useIwpcReady,
+  useIwpcWindow
+} from '@silurus/iwpc';
 import { Plus, Power, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -17,25 +21,20 @@ import { WindowFrame } from '@/components/window-frame';
 import { PROCEDURES } from '@/lib/procedures';
 import { readinessToStatus } from '@/lib/readiness';
 
-const SNIPPET = `import { useIwpcWindow } from '@silurus/iwpc';
+type Transport = NonNullable<IwpcOptions['transport']>;
 
-const iwpc = useIwpcWindow({ transport: 'broadcastChannel' });
+type Props = {
+  transport: Transport;
+  transportLabel: 'postMessage' | 'BroadcastChannel';
+  snippet: string;
+};
 
-useEffect(() => {
-  iwpc?.register('INCREMENT_COUNTER', () => setCount((c) => c + 1));
-  return () => iwpc?.unregister('INCREMENT_COUNTER');
-}, [iwpc]);
-
-// Child waits for the parent's RECEIVED_WINDOW_ID ack before
-// parentIwpcWindow is populated; await iwpc.ready if you need it
-// immediately on mount.
-iwpc?.parentIwpcWindow?.invoke('INCREMENT_COUNTER');`;
-
-export default function Page() {
-  const iwpcWindow = useIwpcWindow({
-    debug: true,
-    transport: 'broadcastChannel'
-  });
+export function CounterChildBody({
+  transport,
+  transportLabel,
+  snippet
+}: Props) {
+  const iwpcWindow = useIwpcWindow({ debug: true, transport });
   const readiness = useIwpcReady(iwpcWindow);
   const [count, setCount] = useState(0);
 
@@ -54,7 +53,7 @@ export default function Page() {
     <WindowFrame
       title='Counter — Child'
       role='Child'
-      transport='BroadcastChannel'
+      transport={transportLabel}
       windowId={iwpcWindow?.windowId}
       parentId={iwpcWindow?.parentWindowId}
       status={readinessToStatus(readiness)}
@@ -63,8 +62,9 @@ export default function Page() {
         <CardHeader>
           <CardTitle>Shared counter</CardTitle>
           <CardDescription>
-            Reload this window to see the parent re-ack the same windowId —
-            the count resets but the bond is rebuilt automatically.
+            Calls flow both ways. This window&apos;s count is independent
+            from the parent&apos;s — incrementing one does not touch the
+            other unless you fire the remote call.
           </CardDescription>
         </CardHeader>
         <CardContent className='flex flex-col gap-6'>
@@ -123,13 +123,10 @@ export default function Page() {
       <Card className='bg-card/60 backdrop-blur'>
         <CardHeader>
           <CardTitle>Code</CardTitle>
-          <CardDescription>
-            Identical to the postMessage child, modulo the transport
-            option and the async readiness note.
-          </CardDescription>
+          <CardDescription>The child side, in full.</CardDescription>
         </CardHeader>
         <CardContent>
-          <CodeBlock code={SNIPPET} filename='child.tsx' />
+          <CodeBlock code={snippet} filename='child.tsx' />
         </CardContent>
       </Card>
     </WindowFrame>

@@ -4,9 +4,9 @@ import { ReturnValueParentBody } from '@/components/return-value-parent';
 
 const PARENT_SNIPPET = `// Parent: open the popup and await a typed value.
 // The postMessage transport keeps \`window.opener\` wired up, so the
-// parent and child share an agent cluster and an event loop. Same shape
-// as the BroadcastChannel demo — only the option differs.
-const child = await iwpc.open(\`./child4?kind=color\`, {
+// parent and child share an event loop. Same call shape as the
+// BroadcastChannel demo — only the option differs.
+const child = await iwpc.open(\`./child?kind=color\`, {
   width: 520,
   height: 540
 });
@@ -23,31 +23,25 @@ if (hex === null) {
   setColor(hex);
 }`;
 
-const CHILD_SNIPPET = `// Child: turn a user interaction into a procedure return value.
-// Identical to the BroadcastChannel child — the call shape is the same.
-const resolverRef = useRef<((v: string | null) => void) | null>(null);
+const CHILD_SNIPPET = `// Child: register BEFORE initialize() so the parent's invoke
+// (which fires the moment open() resolves) finds the handler.
+const instance = new IwpcWindow(window);
 
-useEffect(() => {
-  iwpc?.register('PICK_COLOR', () => {
-    return new Promise<string | null>((resolve) => {
-      resolverRef.current = resolve;
-    });
-  });
-  return () => iwpc?.unregister('PICK_COLOR');
-}, [iwpc]);
+instance.register('PICK_COLOR', () =>
+  new Promise<string | null>((resolve) => {
+    // Resolve from a button click handler in the UI.
+    setPending({ kind: 'color', resolve });
+  })
+);
 
-const onPick = (hex: string) => {
-  resolverRef.current?.(hex);
-  resolverRef.current = null;
-  setTimeout(() => iwpc?.close(), 120);
-};`;
+instance.initialize();`;
 
 export default function Page() {
   return (
     <ReturnValueParentBody
       transport='postMessage'
       transportLabel='postMessage'
-      childRoute='./child4'
+      childRoute='./child'
       parentSnippet={PARENT_SNIPPET}
       childSnippet={CHILD_SNIPPET}
       intro={
@@ -55,9 +49,11 @@ export default function Page() {
           The return-value pattern over the legacy{' '}
           <code className='font-mono'>postMessage</code> transport. The call
           shape is identical to the BroadcastChannel demo — what differs is
-          that <strong className='font-semibold text-foreground'>the child shares
-          the parent&apos;s event loop</strong>. Pick this transport when you
-          want the simplest setup and the windows are short-lived; pick
+          that{' '}
+          <strong className='font-semibold text-foreground'>
+            the child shares the parent&apos;s event loop
+          </strong>
+          . Pick this transport when you want the simplest setup; pick
           BroadcastChannel when the child runs alongside a busy parent.
         </>
       }

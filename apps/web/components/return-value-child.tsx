@@ -2,18 +2,11 @@
 
 import {
   type IwpcOptions,
-  useIwpcReady,
-  useIwpcWindow
+  IwpcWindow,
+  useIwpcReady
 } from '@silurus/iwpc';
 import { AlertTriangle, Check, Send, X } from 'lucide-react';
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -54,99 +47,127 @@ type Props = {
   transportLabel: 'postMessage' | 'BroadcastChannel';
 };
 
-export function ReturnValueChildBody(props: Props) {
-  return (
-    <Suspense fallback={null}>
-      <Body {...props} />
-    </Suspense>
-  );
-}
+type Pending =
+  | { kind: 'color'; resolve: (v: string | null) => void }
+  | { kind: 'confirm'; message: string; resolve: (v: boolean) => void }
+  | { kind: 'text'; prompt: string; resolve: (v: string | null) => void };
 
-function Body({ transport, transportLabel }: Props) {
-  const iwpcWindow = useIwpcWindow({ debug: true, transport });
-  const readiness = useIwpcReady(iwpcWindow);
-  const kind = useKind();
-
-  return (
-    <WindowFrame
-      title={kind ? KIND_TITLE[kind] : 'Remote dialog'}
-      role='Child'
-      transport={transportLabel}
-      windowId={iwpcWindow?.windowId}
-      parentId={iwpcWindow?.parentWindowId}
-      status={readinessToStatus(readiness)}
-    >
-      {kind === null ? (
-        <UnknownKindCard />
-      ) : kind === 'color' ? (
-        <ColorPicker iwpc={iwpcWindow} />
-      ) : kind === 'confirm' ? (
-        <ConfirmDialog iwpc={iwpcWindow} />
-      ) : (
-        <TextPrompt iwpc={iwpcWindow} />
-      )}
-    </WindowFrame>
-  );
-}
-
-function useKind(): Kind | null {
+export function ReturnValueChildBody({ transport, transportLabel }: Props) {
+  const [iwpc, setIwpc] = useState<IwpcWindow>();
   const [kind, setKind] = useState<Kind | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const readiness = useIwpcReady(iwpc);
+
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    const value = params.get('kind');
-    if (value === 'color' || value === 'confirm' || value === 'text') {
-      setKind(value);
+    const k = params.get('kind');
+    const validKind: Kind | null =
+      k === 'color' || k === 'confirm' || k === 'text' ? k : null;
+    setKind(validKind);
+
+    const instance = new IwpcWindow(window, { transport, debug: true });
+
+    // CRITICAL: register the procedure BEFORE initialize(). The parent's
+    // invoke() fires the moment open() resolves, so if we wait for a
+    // separate useEffect to do the registration we lose the race and the
+    // child responds with "Procedure not registered".
+    if (validKind === 'color') {
+      instance.register<void, string | null>(
+        PROCEDURES.PICK_COLOR,
+        () =>
+          new Promise<string | null>((resolve) => {
+            setPending({ kind: 'color', resolve });
+          })
+      );
+    } else if (validKind === 'confirm') {
+      instance.register<{ message?: string } | undefined, boolean>(
+        PROCEDURES.CONFIRM_ACTION,
+        (args) =>
+          new Promise<boolean>((resolve) => {
+            setPending({
+              kind: 'confirm',
+              message: args?.message ?? 'Are you sure you want to continue?',
+              resolve
+            });
+          })
+      );
+    } else if (validKind === 'text') {
+      instance.register<{ prompt?: string } | undefined, string | null>(
+        PROCEDURES.ENTER_TEXT,
+        (args) =>
+          new Promise<string | null>((resolve) => {
+            setPending({
+              kind: 'text',
+              prompt: args?.prompt ?? 'What is your name?',
+              resolve
+            });
+          })
+      );
     }
-  }, []);
-  return kind;
-}
 
-type IwpcLike = ReturnType<typeof useIwpcWindow>;
-
-function usePendingResolver<T>(
-  iwpc: IwpcLike,
-  procedureId: string
-): {
-  isPending: boolean;
-  resolve: (value: T) => void;
-} {
-  const resolverRef = useRef<((value: T) => void) | null>(null);
-  const [isPending, setIsPending] = useState(false);
-
-  useEffect(() => {
-    if (!iwpc) return;
-    iwpc.register(procedureId, () => {
-      setIsPending(true);
-      return new Promise<T>((resolve) => {
-        resolverRef.current = resolve;
-      });
-    });
+    instance.initialize();
+    setIwpc(instance);
     return () => {
-      iwpc.unregister(procedureId);
+      instance.dispose();
     };
-  }, [iwpc, procedureId]);
+  }, [transport]);
 
-  const resolve = useCallback(
-    (value: T) => {
-      if (!resolverRef.current) return;
-      resolverRef.current(value);
-      resolverRef.current = null;
-      setIsPending(false);
+  const settle = useCallback(
+    <T,>(resolve: (v: T) => void, value: T) => {
+      resolve(value);
+      setPending(null);
       // Let the RETURN message flush before tearing down this window.
       window.setTimeout(() => iwpc?.close(), 120);
     },
     [iwpc]
   );
 
-  return { isPending, resolve };
+  return (
+    <WindowFrame
+      title={kind ? KIND_TITLE[kind] : 'Remote dialog'}
+      role='Child'
+      transport={transportLabel}
+      windowId={iwpc?.windowId}
+      parentId={iwpc?.parentWindowId}
+      status={readinessToStatus(readiness)}
+    >
+      {kind === null ? (
+        <UnknownKindCard />
+      ) : kind === 'color' ? (
+        <ColorPickerCard
+          pending={pending?.kind === 'color' ? pending : null}
+          onPick={(v) => {
+            if (pending?.kind === 'color') settle(pending.resolve, v);
+          }}
+        />
+      ) : kind === 'confirm' ? (
+        <ConfirmDialogCard
+          pending={pending?.kind === 'confirm' ? pending : null}
+          onSettle={(v) => {
+            if (pending?.kind === 'confirm') settle(pending.resolve, v);
+          }}
+        />
+      ) : (
+        <TextPromptCard
+          pending={pending?.kind === 'text' ? pending : null}
+          onSettle={(v) => {
+            if (pending?.kind === 'text') settle(pending.resolve, v);
+          }}
+        />
+      )}
+    </WindowFrame>
+  );
 }
 
-function ColorPicker({ iwpc }: { iwpc: IwpcLike }) {
-  const { isPending, resolve } = usePendingResolver<string | null>(
-    iwpc,
-    PROCEDURES.PICK_COLOR
-  );
-
+function ColorPickerCard({
+  pending,
+  onPick
+}: {
+  pending: { kind: 'color' } | null;
+  onPick: (hex: string | null) => void;
+}) {
+  const isPending = pending !== null;
   return (
     <Card className='bg-card/60 backdrop-blur'>
       <CardHeader>
@@ -164,7 +185,7 @@ function ColorPicker({ iwpc }: { iwpc: IwpcLike }) {
               key={hex}
               type='button'
               disabled={!isPending}
-              onClick={() => resolve(hex)}
+              onClick={() => onPick(hex)}
               className='group relative aspect-square rounded-lg ring-1 ring-inset ring-border transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50'
               style={{ backgroundColor: hex }}
               aria-label={hex}
@@ -178,7 +199,7 @@ function ColorPicker({ iwpc }: { iwpc: IwpcLike }) {
         <div className='flex justify-end'>
           <Button
             variant='outline'
-            onClick={() => resolve(null)}
+            onClick={() => onPick(null)}
             disabled={!isPending}
           >
             <X className='size-4' />
@@ -190,39 +211,16 @@ function ColorPicker({ iwpc }: { iwpc: IwpcLike }) {
   );
 }
 
-function ConfirmDialog({ iwpc }: { iwpc: IwpcLike }) {
-  const [message, setMessage] = useState<string>(
-    'Are you sure you want to continue?'
-  );
-  const resolverRef = useRef<((value: boolean) => void) | null>(null);
-  const [isPending, setIsPending] = useState(false);
-
-  useEffect(() => {
-    if (!iwpc) return;
-    iwpc.register(
-      PROCEDURES.CONFIRM_ACTION,
-      (args: { message?: string } | undefined) => {
-        if (typeof args?.message === 'string' && args.message.length > 0) {
-          setMessage(args.message);
-        }
-        setIsPending(true);
-        return new Promise<boolean>((resolve) => {
-          resolverRef.current = resolve;
-        });
-      }
-    );
-    return () => {
-      iwpc.unregister(PROCEDURES.CONFIRM_ACTION);
-    };
-  }, [iwpc]);
-
-  const settle = (value: boolean) => {
-    resolverRef.current?.(value);
-    resolverRef.current = null;
-    setIsPending(false);
-    window.setTimeout(() => iwpc?.close(), 120);
-  };
-
+function ConfirmDialogCard({
+  pending,
+  onSettle
+}: {
+  pending: { kind: 'confirm'; message: string } | null;
+  onSettle: (v: boolean) => void;
+}) {
+  const isPending = pending !== null;
+  const message =
+    pending?.message ?? 'Are you sure you want to continue?';
   return (
     <Card className='bg-card/60 backdrop-blur'>
       <CardHeader>
@@ -243,13 +241,13 @@ function ConfirmDialog({ iwpc }: { iwpc: IwpcLike }) {
         <div className='flex flex-wrap items-center justify-end gap-2'>
           <Button
             variant='outline'
-            onClick={() => settle(false)}
+            onClick={() => onSettle(false)}
             disabled={!isPending}
           >
             <X className='size-4' />
             Cancel
           </Button>
-          <Button onClick={() => settle(true)} disabled={!isPending}>
+          <Button onClick={() => onSettle(true)} disabled={!isPending}>
             <Check className='size-4' />
             Confirm
           </Button>
@@ -259,38 +257,16 @@ function ConfirmDialog({ iwpc }: { iwpc: IwpcLike }) {
   );
 }
 
-function TextPrompt({ iwpc }: { iwpc: IwpcLike }) {
-  const [prompt, setPrompt] = useState<string>('What is your name?');
+function TextPromptCard({
+  pending,
+  onSettle
+}: {
+  pending: { kind: 'text'; prompt: string } | null;
+  onSettle: (v: string | null) => void;
+}) {
+  const isPending = pending !== null;
+  const prompt = pending?.prompt ?? 'What is your name?';
   const [value, setValue] = useState('');
-  const resolverRef = useRef<((value: string | null) => void) | null>(null);
-  const [isPending, setIsPending] = useState(false);
-
-  useEffect(() => {
-    if (!iwpc) return;
-    iwpc.register(
-      PROCEDURES.ENTER_TEXT,
-      (args: { prompt?: string } | undefined) => {
-        if (typeof args?.prompt === 'string' && args.prompt.length > 0) {
-          setPrompt(args.prompt);
-        }
-        setIsPending(true);
-        return new Promise<string | null>((resolve) => {
-          resolverRef.current = resolve;
-        });
-      }
-    );
-    return () => {
-      iwpc.unregister(PROCEDURES.ENTER_TEXT);
-    };
-  }, [iwpc]);
-
-  const settle = (v: string | null) => {
-    resolverRef.current?.(v);
-    resolverRef.current = null;
-    setIsPending(false);
-    window.setTimeout(() => iwpc?.close(), 120);
-  };
-
   return (
     <Card className='bg-card/60 backdrop-blur'>
       <CardHeader>
@@ -305,7 +281,7 @@ function TextPrompt({ iwpc }: { iwpc: IwpcLike }) {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (isPending) settle(value);
+            if (isPending) onSettle(value);
           }}
           className='flex flex-col gap-3'
         >
@@ -322,7 +298,7 @@ function TextPrompt({ iwpc }: { iwpc: IwpcLike }) {
             <Button
               type='button'
               variant='outline'
-              onClick={() => settle(null)}
+              onClick={() => onSettle(null)}
               disabled={!isPending}
             >
               <X className='size-4' />

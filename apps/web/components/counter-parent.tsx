@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type IwpcOptions,
   IwpcWindowAgent,
   useIwpcReady,
   useIwpcWindow
@@ -21,22 +22,22 @@ import { WindowFrame } from '@/components/window-frame';
 import { PROCEDURES } from '@/lib/procedures';
 import { readinessToStatus } from '@/lib/readiness';
 
-const SNIPPET = `import { useIwpcWindow } from '@silurus/iwpc';
+type Transport = NonNullable<IwpcOptions['transport']>;
 
-const iwpc = useIwpcWindow();
+type Props = {
+  transport: Transport;
+  transportLabel: 'postMessage' | 'BroadcastChannel';
+  intro: React.ReactNode;
+  snippet: string;
+};
 
-// Register a procedure callers can invoke on this window.
-useEffect(() => {
-  iwpc?.register('INCREMENT_COUNTER', () => setCount((c) => c + 1));
-  return () => iwpc?.unregister('INCREMENT_COUNTER');
-}, [iwpc]);
-
-// Open a child window and invoke its procedure remotely.
-const child = await iwpc?.open('./child1', { width: 520, height: 540 });
-child?.invoke('INCREMENT_COUNTER');`;
-
-export default function Page() {
-  const iwpcWindow = useIwpcWindow({ debug: true });
+export function CounterParentBody({
+  transport,
+  transportLabel,
+  intro,
+  snippet
+}: Props) {
+  const iwpcWindow = useIwpcWindow({ debug: true, transport });
   const readiness = useIwpcReady(iwpcWindow);
   const [count, setCount] = useState(0);
   const [child, setChild] = useState<IwpcWindowAgent | null>(null);
@@ -54,15 +55,19 @@ export default function Page() {
   }, [iwpcWindow, incrementCounter]);
 
   const openChild = useCallback(async () => {
-    const agent = await iwpcWindow?.open('./child1', {
-      width: 520,
-      height: 540,
-      top: 80,
-      left: 720
-    });
-    if (agent) {
-      childRef.current = agent;
-      setChild(agent);
+    try {
+      const agent = await iwpcWindow?.open('./child', {
+        width: 520,
+        height: 540,
+        top: 80,
+        left: 720
+      });
+      if (agent) {
+        childRef.current = agent;
+        setChild(agent);
+      }
+    } catch (e) {
+      console.error(e);
     }
   }, [iwpcWindow]);
 
@@ -74,17 +79,14 @@ export default function Page() {
     <WindowFrame
       title='Counter — Parent'
       role='Parent'
-      transport='postMessage'
+      transport={transportLabel}
       windowId={iwpcWindow?.windowId}
       status={readinessToStatus(readiness)}
     >
       <Card className='bg-card/60 backdrop-blur'>
         <CardHeader>
           <CardTitle>Shared counter</CardTitle>
-          <CardDescription>
-            Either side calls <code className='font-mono'>INCREMENT_COUNTER</code> on
-            the other. Fire-and-forget — no return value.
-          </CardDescription>
+          <CardDescription>{intro}</CardDescription>
         </CardHeader>
         <CardContent className='flex flex-col gap-6'>
           <div className='flex items-center justify-between rounded-lg border border-border bg-background/50 p-6'>
@@ -139,7 +141,7 @@ export default function Page() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <CodeBlock code={SNIPPET} filename='parent.tsx' />
+          <CodeBlock code={snippet} filename='parent.tsx' />
         </CardContent>
       </Card>
     </WindowFrame>
