@@ -1,4 +1,4 @@
-import { ArrowRight, MessagesSquare, Radio, Repeat } from 'lucide-react';
+import { ArrowRight, Megaphone, MessagesSquare, Repeat } from 'lucide-react';
 import Link from 'next/link';
 
 import { CodeBlock } from '@/components/code-block';
@@ -43,7 +43,7 @@ const demos: Demo[] = [
     description:
       'Same demo. Child opens with noopener and runs on its own event loop — a busy parent never blocks the child or vice versa.',
     badge: 'BroadcastChannel',
-    icon: Radio
+    icon: Repeat
   },
   {
     href: './dialog/postmessage',
@@ -62,6 +62,24 @@ const demos: Demo[] = [
       'Same dialog flow, but with thread isolation: the popup runs on its own event loop so its UI stays responsive even when the parent is doing heavy work.',
     badge: 'BroadcastChannel',
     icon: MessagesSquare
+  },
+  {
+    href: './fanout/postmessage',
+    title: 'Broadcast to all',
+    subtitle: 'broadcast()',
+    description:
+      'One call from the parent fans out to every other window on the same origin and channel. Fire-and-forget. Open several popups and watch them tick together.',
+    badge: 'postMessage',
+    icon: Megaphone
+  },
+  {
+    href: './fanout/broadcast',
+    title: 'Broadcast to all',
+    subtitle: 'broadcast()',
+    description:
+      'Same fan-out call, but every popup runs on its own event loop. The handler still fires on each child even if one of them is busy with something else.',
+    badge: 'BroadcastChannel',
+    icon: Megaphone
   }
 ];
 
@@ -175,7 +193,7 @@ function Demos() {
           Demos
         </span>
         <h2 className='text-2xl font-semibold tracking-tight sm:text-3xl'>
-          Two patterns, two transports
+          Three patterns, two transports
         </h2>
         <p className='max-w-2xl text-sm text-muted-foreground'>
           Each row is the same demo over two transports. The call shape

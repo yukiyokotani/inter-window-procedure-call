@@ -1,6 +1,6 @@
 {
   "name": "@silurus/iwpc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Type-safe RPC between browser windows, tabs, and popups. Choose postMessage or BroadcastChannel transport.",
   "license": "MIT",
   "author": {

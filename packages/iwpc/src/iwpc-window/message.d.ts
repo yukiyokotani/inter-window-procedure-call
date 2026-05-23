@@ -31,8 +31,16 @@ export type IwpcReturnMessage = IwpcMessageBaseMessage & {
   error?: { name: string; message: string };
 };
 
+export type IwpcBroadcastMessage = {
+  type: 'BROADCAST';
+  processId: string;
+  senderWindowId: string;
+  args: unknown;
+};
+
 export type IwpcMessage =
   | IwpcInvokeMessage
   | IwpcReturnMessage
+  | IwpcBroadcastMessage
   | NotifyWindowIdMessage
   | ReceivedWindowIdMessage;
