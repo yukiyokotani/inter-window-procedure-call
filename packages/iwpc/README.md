@@ -179,6 +179,46 @@ await iwpc.ready  ← resolves when the handshake completes
 
 The handshake is what makes a window reachable from outside. Until you call `initialize()`, the window is invisible to its peers. After it resolves, the procedure map is consulted on every incoming `INVOKE` / `BROADCAST`.
 
+### Protocol view
+
+The sequence below traces a single `iwpc.open()` end-to-end for the `broadcastChannel` transport, including a follow-up `invoke()` so you can see where the handshake ends and procedure traffic begins.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Parent
+    participant BC as BroadcastChannel<br/>(channelName)
+    participant Child
+
+    Note over Parent: new IwpcWindow(window)
+    Parent->>Parent: register('PROC', handler)
+    Parent->>Parent: initialize()
+
+    Parent->>Parent: const agent = iwpc.open(url, opts)
+    Note over Parent: generates childWindowId,<br/>appends ?__iwpcWindowId
+    Parent--)Child: window.open(url, noopener)
+
+    Note over Child: new IwpcWindow(window)
+    Child->>Child: register('PROC', handler)
+    Child->>Child: initialize()
+    Child->>BC: NOTIFY_WINDOW_ID { myWindowId }
+    BC->>Parent: NOTIFY_WINDOW_ID
+
+    Parent->>BC: RECEIVED_WINDOW_ID { yourWindowId, myWindowId }
+    BC->>Child: RECEIVED_WINDOW_ID
+
+    Note over Parent: open() resolves<br/>with the child agent
+    Note over Child: iwpc.ready resolves;<br/>parentIwpcWindow populated
+
+    Parent->>BC: INVOKE { targetWindowId, processId, iwpcTaskId, args }
+    BC->>Child: INVOKE
+    Child->>BC: RETURN { iwpcTaskId, returnValue }
+    BC->>Parent: RETURN
+    Note over Parent: invoke() resolves
+```
+
+For the `postMessage` transport the shape is identical, but `NOTIFY_WINDOW_ID` and `RECEIVED_WINDOW_ID` travel over `window.opener.postMessage` / `childWindow.postMessage` instead of the BroadcastChannel. `INVOKE` / `RETURN` always travel over the BroadcastChannel regardless of transport.
+
 ### Register before initialize
 
 The peer fires `invoke()` the instant its `open()` resolves. If you register the handler **after** `initialize()` — say, in a later `useEffect` — the peer's INVOKE can land in a window with an empty procedure map and reject with `IwpcProcedureNotFoundError`.
