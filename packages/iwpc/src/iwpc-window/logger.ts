@@ -5,27 +5,27 @@ export class Logger {
     this.enable = enable;
   }
 
-  public _debug(...mesage: unknown[]) {
+  public _debug(...message: unknown[]) {
     if (this.enable) {
-      console.debug(new Date().toISOString(), ...mesage);
+      console.debug(new Date().toISOString(), ...message);
     }
   }
 
-  public _log(...mesage: unknown[]) {
+  public _log(...message: unknown[]) {
     if (this.enable) {
-      console.log(new Date().toISOString(), ...mesage);
+      console.log(new Date().toISOString(), ...message);
     }
   }
 
-  public _warn(...mesage: unknown[]) {
+  public _warn(...message: unknown[]) {
     if (this.enable) {
-      console.warn(new Date().toISOString(), ...mesage);
+      console.warn(new Date().toISOString(), ...message);
     }
   }
 
-  public _error(...mesage: unknown[]) {
+  public _error(...message: unknown[]) {
     if (this.enable) {
-      console.error(new Date().toISOString(), ...mesage);
+      console.error(new Date().toISOString(), ...message);
     }
   }
 }

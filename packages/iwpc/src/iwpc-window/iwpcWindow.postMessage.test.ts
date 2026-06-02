@@ -151,6 +151,52 @@ describe('IwpcWindow (postMessage transport)', () => {
     expect((caught as Error).message).toBe('boom');
   });
 
+  it('maps a thrown string into a remote error carrying that string', async () => {
+    const { parent, iwpc: parentIwpc } = makeParent();
+    const { childFake, childIwpc } = buildChild(parent);
+    linkOpen(parent, childFake);
+
+    const agentPromise = parentIwpc.open('/child');
+    await flush();
+    asSender(childFake, () => childIwpc.initialize());
+    const agent = await agentPromise;
+
+    childIwpc.register('THROW_STRING', () => {
+      // eslint-disable-next-line @typescript-eslint/no-throw-literal
+      throw 'plain failure';
+    });
+
+    const caught = await agent
+      .invoke('THROW_STRING', undefined, { timeout: 500 })
+      .catch((e) => e);
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).name).toBe('IwpcRemoteError');
+    expect((caught as Error).message).toBe('plain failure');
+  });
+
+  it('maps a thrown non-string value into a generic remote error', async () => {
+    const { parent, iwpc: parentIwpc } = makeParent();
+    const { childFake, childIwpc } = buildChild(parent);
+    linkOpen(parent, childFake);
+
+    const agentPromise = parentIwpc.open('/child');
+    await flush();
+    asSender(childFake, () => childIwpc.initialize());
+    const agent = await agentPromise;
+
+    childIwpc.register('THROW_OBJECT', () => {
+      // eslint-disable-next-line @typescript-eslint/no-throw-literal
+      throw { code: 500 };
+    });
+
+    const caught = await agent
+      .invoke('THROW_OBJECT', undefined, { timeout: 500 })
+      .catch((e) => e);
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).name).toBe('IwpcRemoteError');
+    expect((caught as Error).message).toBe('Unknown error');
+  });
+
   it('child can invoke parent procedures', async () => {
     const { parent, iwpc: parentIwpc } = makeParent();
     const { childFake, childIwpc } = buildChild(parent);
